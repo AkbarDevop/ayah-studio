@@ -36,15 +36,20 @@ export default function SubtitleEditor({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+    <div className="flex flex-col gap-5 rounded-[1.35rem] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(20,24,32,0.98),rgba(16,20,28,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="font-mono-ui text-sm font-medium text-[var(--text)]">
+        <div>
+          <p className="font-mono-ui text-[10px] uppercase tracking-[0.16em] text-[var(--text-dim)]">
+            Inspector
+          </p>
+          <h3 className="mt-1 font-mono-ui text-sm font-medium text-[var(--text)]">
           Editing {subtitle.label ?? `Ayah ${subtitle.ayahNum}`}
           {subtitle.chunkCount && subtitle.chunkCount > 1
             ? ` · Part ${subtitle.chunkIndex ?? 1}/${subtitle.chunkCount}`
             : ""}
-        </h3>
+          </h3>
+        </div>
         <button
           type="button"
           onClick={onDelete}

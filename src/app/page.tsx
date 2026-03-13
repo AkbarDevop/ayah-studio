@@ -172,6 +172,100 @@ export default function Home() {
     subtitlesState.subtitleStyle,
     subtitlesState.subtitleFormatting
   );
+  const hasMedia = Boolean(media.videoSrc || media.audioSrc);
+  const hasDetection = Boolean(detection.detectionResult);
+  const hasSubtitles = subtitlesState.subtitles.length > 0;
+  const selectedAyahCount = quran.selectedAyahIndices.size;
+  const activeSubtitleStyle =
+    SUBTITLE_STYLES.find(
+      (candidate) => candidate.id === subtitlesState.subtitleStyle
+    )?.label ?? SUBTITLE_STYLES[0]?.label ?? "Classic Gold";
+  const activeRatioOption =
+    ASPECT_RATIO_OPTIONS.find(
+      (option) => option.id === subtitlesState.aspectRatio
+    ) ?? ASPECT_RATIO_OPTIONS[0];
+  const detectionProviderLabel = detection.detectionResult
+    ? detection.detectionResult.provider.startsWith("local:")
+      ? "Local Whisper"
+      : "Remote ASR"
+    : detection.detectingAyahs
+      ? "Analyzing"
+      : "Idle";
+  const sourceSummary = media.videoName
+    ? "Clip Ready"
+    : media.audioName
+      ? "Audio Override"
+      : "Awaiting Source";
+  const detectionSummary = bestDetection
+    ? `${bestDetection.surahName} ${bestDetection.startAyah}${
+        bestDetection.endAyah !== bestDetection.startAyah
+          ? `-${bestDetection.endAyah}`
+          : ""
+      }`
+    : detection.detectingAyahs
+      ? "Listening for ayahs"
+      : "No detection yet";
+  const workflowSteps: Array<{
+    id: string;
+    label: string;
+    detail: string;
+    icon: typeof Upload;
+    state: "done" | "active" | "pending";
+  }> = [
+    {
+      id: "source",
+      label: "Source",
+      detail: hasMedia ? "Clip or audio loaded" : "Upload or import a clip",
+      icon: Upload,
+      state: hasMedia ? "done" : "active",
+    },
+    {
+      id: "detect",
+      label: "Detect",
+      detail: hasDetection
+        ? "Ayah range matched"
+        : hasMedia
+          ? "Auto-detection ready"
+          : "Waiting for source",
+      icon: Sparkles,
+      state: hasDetection ? "done" : hasMedia ? "active" : "pending",
+    },
+    {
+      id: "edit",
+      label: "Edit",
+      detail: hasSubtitles
+        ? `${subtitlesState.subtitles.length} timed blocks`
+        : hasDetection
+          ? "Generate or apply subtitles"
+          : "Selection comes next",
+      icon: Layers,
+      state: hasSubtitles ? "done" : hasDetection ? "active" : "pending",
+    },
+    {
+      id: "style",
+      label: "Style",
+      detail:
+        subtitlesState.tab === "style"
+          ? "Inspector open"
+          : "Tune fonts and placement",
+      icon: Star,
+      state:
+        subtitlesState.tab === "style"
+          ? "active"
+          : hasSubtitles
+            ? "done"
+            : "pending",
+    },
+    {
+      id: "export",
+      label: "Export",
+      detail: hasSubtitles
+        ? "SRT, ASS, JSON ready"
+        : "Needs subtitles first",
+      icon: Download,
+      state: hasSubtitles ? "active" : "pending",
+    },
+  ];
   const autoDetectedSourceKeyRef = useRef<string | null>(null);
   const autoAppliedDetectionKeyRef = useRef<string | null>(null);
 
@@ -370,582 +464,267 @@ export default function Home() {
   /* Render                                                              */
   /* ------------------------------------------------------------------ */
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* ============================================================ */}
-      {/* HEADER                                                        */}
-      {/* ============================================================ */}
-      <header className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-5 py-3">
-        <div className="flex items-center gap-3">
-          {/* Logo */}
-          <div className="text-[var(--gold)]">
-            <svg width="30" height="30" viewBox="0 0 30 30">
-              <circle
-                cx="15"
-                cy="15"
-                r="13"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.2"
-              />
-              <polygon
-                points="15,4 18,12 15,10 12,12"
-                fill="currentColor"
-                opacity="0.6"
-              />
-              <polygon
-                points="15,26 18,18 15,20 12,18"
-                fill="currentColor"
-                opacity="0.6"
-              />
-              <polygon
-                points="4,15 12,12 10,15 12,18"
-                fill="currentColor"
-                opacity="0.6"
-              />
-              <polygon
-                points="26,15 18,12 20,15 18,18"
-                fill="currentColor"
-                opacity="0.6"
-              />
-              <circle
-                cx="15"
-                cy="15"
-                r="3"
-                fill="currentColor"
-                opacity="0.3"
-              />
-            </svg>
+    <div className="studio-shell flex min-h-screen flex-col">
+      <header className="border-b border-[var(--border)]/80 bg-[rgba(12,15,20,0.8)] backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[1800px] flex-wrap items-center justify-between gap-4 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="text-[var(--gold)]">
+              <svg width="30" height="30" viewBox="0 0 30 30">
+                <circle
+                  cx="15"
+                  cy="15"
+                  r="13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                />
+                <polygon
+                  points="15,4 18,12 15,10 12,12"
+                  fill="currentColor"
+                  opacity="0.6"
+                />
+                <polygon
+                  points="15,26 18,18 15,20 12,18"
+                  fill="currentColor"
+                  opacity="0.6"
+                />
+                <polygon
+                  points="4,15 12,12 10,15 12,18"
+                  fill="currentColor"
+                  opacity="0.6"
+                />
+                <polygon
+                  points="26,15 18,12 20,15 18,18"
+                  fill="currentColor"
+                  opacity="0.6"
+                />
+                <circle
+                  cx="15"
+                  cy="15"
+                  r="3"
+                  fill="currentColor"
+                  opacity="0.3"
+                />
+              </svg>
+            </div>
+
+            <div>
+              <p className="section-kicker">Studio Shell</p>
+              <h1 className="mt-1 text-[24px] font-semibold leading-tight text-[var(--gold)]">
+                Ayah Studio
+              </h1>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-[family-name:var(--font-ibm-plex)]">
+                Quran video editor for clip-first subtitle workflows
+              </p>
+            </div>
           </div>
 
-          {/* Title */}
-          <div>
-            <h1 className="text-[22px] font-semibold leading-tight text-[var(--gold)]">
-              Ayah Studio
-            </h1>
-            <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-[var(--text-muted)] font-[family-name:var(--font-ibm-plex)]">
-              Quran Video Editor
-            </p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="metric-pill">
+              {activeRatioOption.label} · {activeRatioOption.hint}
+            </span>
+            <span className="metric-pill">{activeSubtitleStyle}</span>
+            <span className="metric-pill">{detectionProviderLabel}</span>
+            {subtitlesState.subtitles.length > 0 && (
+              <button
+                type="button"
+                onClick={() => subtitlesState.setShowExport(true)}
+                className="flex items-center gap-2 rounded-xl bg-[var(--gold)] px-4 py-2.5 text-sm font-semibold text-[var(--bg)] shadow-[0_16px_34px_rgba(212,168,83,0.22)] transition-all hover:bg-[var(--gold-light)] active:scale-[0.98]"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export</span>
+              </button>
+            )}
           </div>
         </div>
-
-        {/* Export Button */}
-        {subtitlesState.subtitles.length > 0 && (
-          <button
-            type="button"
-            onClick={() => subtitlesState.setShowExport(true)}
-            className="flex items-center gap-2 rounded-lg bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-[var(--bg)] shadow-lg shadow-[var(--gold)]/20 transition-all hover:bg-[var(--gold-light)] active:scale-[0.98]"
-          >
-            <Download className="h-4 w-4" />
-            <span>Export</span>
-          </button>
-        )}
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* ============================================================ */}
-        {/* SIDEBAR                                                      */}
-        {/* ============================================================ */}
-        <aside className="flex w-[340px] flex-col border-r border-[var(--border)] bg-[var(--surface)]">
-          {/* Tab Buttons */}
-          <div className="flex border-b border-[var(--border)]">
-            {tabs.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => subtitlesState.setTab(id)}
-                className={[
-                  "flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium uppercase tracking-wider transition-colors font-[family-name:var(--font-ibm-plex)]",
-                  subtitlesState.tab === id
-                    ? "border-b-2 border-[var(--gold)] bg-[var(--surface-alt)] text-[var(--gold)]"
-                    : "text-[var(--text-muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--text)]",
-                ].join(" ")}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto">
-            {/* ------ Browse Tab ------ */}
-            {subtitlesState.tab === "browse" && (
-              <>
-                {quran.loading && (
-                  <div className="flex items-center justify-center py-16">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
-                  </div>
-                )}
-
-                {quran.error && (
-                  <div className="mx-4 mt-4 rounded-lg border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
-                    {quran.error}
-                  </div>
-                )}
-
-                {!quran.loading && !quran.selectedSurah && (
-                  <SurahBrowser
-                    surahs={quran.surahs}
-                    searchQuery={quran.searchQuery}
-                    onSearchChange={quran.setSearchQuery}
-                    onSelect={quran.loadSurah}
-                    translationEdition={quran.translationEdition}
-                    onTranslationChange={quran.setTranslationEdition}
-                  />
-                )}
-
-                {!quran.loading && quran.selectedSurah && (
-                  <AyahSelector
-                    surahName={quran.selectedSurah.name}
-                    ayahs={quran.ayahs}
-                    translations={quran.translations}
-                    selectedIndices={quran.selectedAyahIndices}
-                    onToggle={quran.toggleAyahIndex}
-                    onSelectAll={quran.selectAllAyahs}
-                    onDeselectAll={quran.deselectAllAyahs}
-                    onBack={quran.clearSelection}
-                    onGenerate={generateSubtitles}
-                    defaultDuration={subtitlesState.defaultDuration}
-                    onDurationChange={subtitlesState.setDefaultDuration}
-                  />
-                )}
-              </>
-            )}
-
-            {/* ------ Subtitles Tab ------ */}
-            {subtitlesState.tab === "subtitles" && (
-              <div className="p-4">
-                {subtitlesState.subtitles.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <Layers className="mb-3 h-8 w-8 text-[var(--text-dim)]" />
-                    <p className="text-sm text-[var(--text-muted)]">
-                      No subtitles yet
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--text-dim)]">
-                      Browse a surah and generate subtitles
+      <div className="flex-1 overflow-hidden px-4 pb-4 pt-4">
+        <div className="mx-auto grid h-full max-w-[1800px] gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <aside className="studio-panel flex min-h-0 flex-col overflow-hidden">
+            <div className="border-b border-[var(--border)]/80 p-4">
+              <div className="rounded-[1.25rem] border border-[var(--border)]/70 bg-black/10 p-4">
+                <p className="section-kicker">Library</p>
+                <div className="mt-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-[var(--text)]">
+                      Quran Browser & Style Desk
+                    </h2>
+                    <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                      Pick ayahs, review generated blocks, and tune the subtitle
+                      system from one place.
                     </p>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                      {subtitlesState.subtitles.length} subtitle
-                      {subtitlesState.subtitles.length !== 1 ? "s" : ""}
-                    </p>
-                    {subtitlesState.subtitles.map((sub, idx) => (
-                      <button
-                        key={`sub-${sub.ayahNum}-${idx}`}
-                        type="button"
-                        onClick={() => {
-                          subtitlesState.setSelectedSubIdx(idx);
-                          setCurrentTime(sub.start);
-                        }}
-                        className={[
-                          "w-full rounded-lg border p-3 text-left transition-all",
-                          subtitlesState.selectedSubIdx === idx
-                            ? "border-[var(--gold-dim)] bg-[var(--surface-alt)]"
-                            : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
-                        ].join(" ")}
-                        >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-[var(--gold)] font-[family-name:var(--font-ibm-plex)]">
-                            {sub.label ?? `Ayah ${sub.ayahNum}`}
-                            {sub.chunkCount && sub.chunkCount > 1
-                              ? ` · ${sub.chunkIndex ?? 1}/${sub.chunkCount}`
-                              : ""}
-                          </span>
-                          <span className="text-[10px] text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                            {sub.start.toFixed(1)}s &ndash;{" "}
-                            {sub.end.toFixed(1)}s
-                          </span>
-                        </div>
-                        <p
-                          dir="rtl"
-                          className="mt-1.5 truncate text-sm text-[var(--text-muted)] font-[family-name:var(--font-arabic)]"
-                        >
-                          {sub.arabic}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  <span className="metric-pill">
+                    {quran.selectedSurah?.englishName ?? "No Surah Loaded"}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-alt)]/60 p-1">
+                  {tabs.map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => subtitlesState.setTab(id)}
+                      className={[
+                        "flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors font-[family-name:var(--font-ibm-plex)]",
+                        subtitlesState.tab === id
+                          ? "bg-[var(--gold)] text-[var(--bg)] shadow-[0_12px_30px_rgba(212,168,83,0.22)]"
+                          : "text-[var(--text-muted)] hover:bg-black/15 hover:text-[var(--text)]",
+                      ].join(" ")}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="metric-pill">{selectedAyahCount} selected</span>
+                  <span className="metric-pill">
+                    {subtitlesState.subtitles.length} blocks
+                  </span>
+                  <span className="metric-pill">{activeSubtitleStyle}</span>
+                </div>
               </div>
-            )}
+            </div>
 
-            {/* ------ Style Tab ------ */}
-            {subtitlesState.tab === "style" && (
-              <div className="p-4">
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                  Subtitle Style
-                </p>
-
-                <div className="space-y-3">
-                  {SUBTITLE_STYLES.map((style) => {
-                    const isActive = subtitlesState.subtitleStyle === style.id;
-                    return (
-                      <button
-                        key={style.id}
-                        type="button"
-                        onClick={() => subtitlesState.setSubtitleStyle(style.id)}
-                        className={[
-                          "w-full rounded-lg border p-3 text-left transition-all",
-                          isActive
-                            ? "border-[var(--gold-dim)] bg-[var(--surface-alt)]"
-                            : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
-                        ].join(" ")}
-                      >
-                        {/* Label + Active badge */}
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-sm font-medium text-[var(--text)]">
-                            {style.label}
-                          </span>
-                          {isActive && (
-                            <span className="rounded-full bg-[var(--gold)] px-2 py-0.5 text-[10px] font-semibold text-[var(--bg)]">
-                              Active
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Preview */}
-                        <div
-                          data-subtitle-theme={style.id}
-                          className="subtitle-theme-surface rounded-md px-4 py-3 text-center"
-                        >
-                          <p
-                            dir="rtl"
-                            className="subtitle-theme-arabic text-lg leading-relaxed"
-                          >
-                            {"\u0628\u0650\u0633\u0652\u0645\u0650 \u0671\u0644\u0644\u0651\u064E\u0647\u0650 \u0671\u0644\u0631\u0651\u064E\u062D\u0652\u0645\u064E\u0640\u0670\u0646\u0650 \u0671\u0644\u0631\u0651\u064E\u062D\u0650\u064A\u0645\u0650"}
-                          </p>
-                          <p className="subtitle-theme-translation mt-1 text-xs italic">
-                            In the name of God, the Most Gracious, the Most
-                            Merciful
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-6">
-                  <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                    Formatting
-                  </p>
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className="block">
-                        <span className="font-mono-ui mb-1 block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Arabic Font
-                        </span>
-                        <select
-                          value={subtitlesState.subtitleFormatting.arabicFontFamily}
-                          onChange={(event) =>
-                            subtitlesState.updateSubtitleFormatting({
-                              arabicFontFamily: event.target.value as "amiri" | "naskh",
-                            })
-                          }
-                          className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
-                        >
-                          {ARABIC_FONT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <label className="block">
-                        <span className="font-mono-ui mb-1 block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Translation Font
-                        </span>
-                        <select
-                          value={subtitlesState.subtitleFormatting.translationFontFamily}
-                          onChange={(event) =>
-                            subtitlesState.updateSubtitleFormatting({
-                              translationFontFamily: event.target.value as "ui" | "mono",
-                            })
-                          }
-                          className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
-                        >
-                          {TRANSLATION_FONT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {subtitlesState.tab === "browse" && (
+                <>
+                  {!quran.loading && !quran.selectedSurah && (
+                    <div className="studio-panel-soft mb-4 px-4 py-3">
+                      <p className="section-kicker">Browse</p>
+                      <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
+                        Search the mushaf, choose a translation, then select the
+                        ayahs you want to bring into the editor.
+                      </p>
                     </div>
+                  )}
 
-                    <label className="mt-4 block">
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Arabic Size
-                        </span>
-                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
-                          {subtitlesState.subtitleFormatting.arabicFontSize}px
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={20}
-                        max={44}
-                        step={1}
-                        value={subtitlesState.subtitleFormatting.arabicFontSize}
-                        onChange={(event) =>
-                          subtitlesState.updateSubtitleFormatting({
-                            arabicFontSize: Number.parseInt(event.target.value, 10),
-                          })
-                        }
-                        className="w-full accent-[var(--gold)]"
-                      />
-                    </label>
+                  {quran.loading && (
+                    <div className="flex items-center justify-center py-16">
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
+                    </div>
+                  )}
 
-                    <label className="mt-4 block">
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Translation Size
-                        </span>
-                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
-                          {subtitlesState.subtitleFormatting.translationFontSize}px
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={12}
-                        max={28}
-                        step={1}
-                        value={subtitlesState.subtitleFormatting.translationFontSize}
-                        onChange={(event) =>
-                          subtitlesState.updateSubtitleFormatting({
-                            translationFontSize: Number.parseInt(event.target.value, 10),
-                          })
-                        }
-                        className="w-full accent-[var(--gold)]"
-                      />
-                    </label>
+                  {quran.error && (
+                    <div className="mb-4 rounded-xl border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
+                      {quran.error}
+                    </div>
+                  )}
 
-                    <label className="mt-4 block">
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Arabic Color
-                        </span>
-                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
-                          {resolvedSubtitleColors.arabicColor}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={resolvedSubtitleColors.arabicColor}
-                          onChange={(event) =>
-                            subtitlesState.updateSubtitleFormatting({
-                              arabicColorOverride: event.target.value,
-                            })
-                          }
-                          className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--surface-alt)]"
-                        />
+                  {!quran.loading && !quran.selectedSurah && (
+                    <SurahBrowser
+                      surahs={quran.surahs}
+                      searchQuery={quran.searchQuery}
+                      onSearchChange={quran.setSearchQuery}
+                      onSelect={quran.loadSurah}
+                      translationEdition={quran.translationEdition}
+                      onTranslationChange={quran.setTranslationEdition}
+                    />
+                  )}
+
+                  {!quran.loading && quran.selectedSurah && (
+                    <AyahSelector
+                      surahName={quran.selectedSurah.name}
+                      ayahs={quran.ayahs}
+                      translations={quran.translations}
+                      selectedIndices={quran.selectedAyahIndices}
+                      onToggle={quran.toggleAyahIndex}
+                      onSelectAll={quran.selectAllAyahs}
+                      onDeselectAll={quran.deselectAllAyahs}
+                      onBack={quran.clearSelection}
+                      onGenerate={generateSubtitles}
+                      defaultDuration={subtitlesState.defaultDuration}
+                      onDurationChange={subtitlesState.setDefaultDuration}
+                    />
+                  )}
+                </>
+              )}
+
+              {subtitlesState.tab === "subtitles" && (
+                <div className="p-1">
+                  {subtitlesState.subtitles.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <Layers className="mb-3 h-8 w-8 text-[var(--text-dim)]" />
+                      <p className="text-sm text-[var(--text-muted)]">
+                        No subtitles yet
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--text-dim)]">
+                        Browse a surah and generate subtitles
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                        {subtitlesState.subtitles.length} subtitle
+                        {subtitlesState.subtitles.length !== 1 ? "s" : ""}
+                      </p>
+                      {subtitlesState.subtitles.map((sub, idx) => (
                         <button
+                          key={`sub-${sub.ayahNum}-${idx}`}
                           type="button"
-                          onClick={() =>
-                            subtitlesState.updateSubtitleFormatting({
-                              arabicColorOverride: null,
-                            })
-                          }
-                          className="font-mono-ui rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
-                        >
-                          Use Style Color
-                        </button>
-                      </div>
-                    </label>
-
-                    <label className="mt-4 block">
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Translation Color
-                        </span>
-                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
-                          {resolvedSubtitleColors.translationColor}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={resolvedSubtitleColors.translationColor}
-                          onChange={(event) =>
-                            subtitlesState.updateSubtitleFormatting({
-                              translationColorOverride: event.target.value,
-                            })
-                          }
-                          className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--surface-alt)]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            subtitlesState.updateSubtitleFormatting({
-                              translationColorOverride: null,
-                            })
-                          }
-                          className="font-mono-ui rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
-                        >
-                          Use Style Color
-                        </button>
-                      </div>
-                    </label>
-
-                    <label className="mt-4 flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={subtitlesState.subtitleFormatting.translationItalic}
-                        onChange={(event) =>
-                          subtitlesState.updateSubtitleFormatting({
-                            translationItalic: event.target.checked,
-                          })
-                        }
-                        className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--surface-alt)] accent-[var(--gold)]"
-                      />
-                      <span>
-                        <span className="block text-sm text-[var(--text)]">
-                          Italicize translation text
-                        </span>
-                        <span className="mt-1 block text-xs leading-relaxed text-[var(--text-dim)]">
-                          Applies to the preview and styled `.ASS` export.
-                        </span>
-                      </span>
-                    </label>
-
-                    <label className="mt-4 block">
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Background Opacity
-                        </span>
-                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
-                          {subtitlesState.subtitleFormatting.backgroundOpacity}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={subtitlesState.subtitleFormatting.backgroundOpacity}
-                        onChange={(event) =>
-                          subtitlesState.updateSubtitleFormatting({
-                            backgroundOpacity: Number.parseInt(event.target.value, 10),
-                          })
-                        }
-                        className="w-full accent-[var(--gold)]"
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                    Long Ayah Handling
-                  </p>
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <label className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={subtitlesState.subtitleFormatting.splitLongAyahs}
-                        onChange={(event) =>
-                          subtitlesState.updateSubtitleFormatting({
-                            splitLongAyahs: event.target.checked,
-                          })
-                        }
-                        className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--surface-alt)] accent-[var(--gold)]"
-                      />
-                      <span>
-                        <span className="block text-sm text-[var(--text)]">
-                          Split long ayahs into multiple timed subtitle chunks
-                        </span>
-                        <span className="mt-1 block text-xs leading-relaxed text-[var(--text-dim)]">
-                          Applies to new subtitle generation and detected ayah ranges.
-                        </span>
-                      </span>
-                    </label>
-
-                    <label className="mt-4 block">
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                          Max Arabic Words Per Chunk
-                        </span>
-                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
-                          {subtitlesState.subtitleFormatting.maxWordsPerChunk}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={6}
-                        max={22}
-                        step={1}
-                        value={subtitlesState.subtitleFormatting.maxWordsPerChunk}
-                        onChange={(event) =>
-                          subtitlesState.updateSubtitleFormatting({
-                            maxWordsPerChunk: Number.parseInt(event.target.value, 10),
-                          })
-                        }
-                        className="w-full accent-[var(--gold)]"
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Reciter Reference */}
-                <div className="mt-6">
-                  <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                    Reciter Reference
-                  </p>
-                  <div className="space-y-1">
-                    {RECITERS.map((name) => (
-                      <div
-                        key={name}
-                        className="rounded-md px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--text)]"
-                      >
-                        {name}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                      Subtitle Position
-                    </p>
-                    <span className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)]">
-                      X {Math.round(subtitlesState.subtitlePlacement.x * 100)}% · Y{" "}
-                      {Math.round(subtitlesState.subtitlePlacement.y * 100)}%
-                    </span>
-                  </div>
-                  <p className="mb-3 text-xs leading-relaxed text-[var(--text-muted)]">
-                    Drag the live subtitle in the preview to fine-tune, or jump
-                    to a preset below.
-                  </p>
-                  <div className="space-y-2">
-                    {SUBTITLE_POSITION_PRESETS.map((preset) => {
-                      const isActive =
-                        Math.abs(subtitlesState.subtitlePlacement.x - preset.placement.x) <
-                          0.01 &&
-                        Math.abs(subtitlesState.subtitlePlacement.y - preset.placement.y) <
-                          0.01;
-
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() =>
-                            subtitlesState.setSubtitlePlacement(preset.placement)
-                          }
+                          onClick={() => {
+                            subtitlesState.setSelectedSubIdx(idx);
+                            setCurrentTime(sub.start);
+                          }}
                           className={[
-                            "w-full rounded-lg border p-3 text-left transition-colors",
-                            isActive
-                              ? "border-[var(--gold-dim)] bg-[var(--surface-alt)]"
+                            "w-full rounded-2xl border p-3 text-left transition-all",
+                            subtitlesState.selectedSubIdx === idx
+                              ? "border-[var(--gold-dim)] bg-[var(--surface-alt)] shadow-[0_14px_34px_rgba(212,168,83,0.08)]"
                               : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
                           ].join(" ")}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="font-mono-ui text-xs font-semibold uppercase tracking-[0.12em] text-[var(--gold)]">
-                              {preset.label}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-[var(--gold)] font-[family-name:var(--font-ibm-plex)]">
+                              {sub.label ?? `Ayah ${sub.ayahNum}`}
+                              {sub.chunkCount && sub.chunkCount > 1
+                                ? ` · ${sub.chunkIndex ?? 1}/${sub.chunkCount}`
+                                : ""}
+                            </span>
+                            <span className="text-[10px] text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                              {sub.start.toFixed(1)}s &ndash;{" "}
+                              {sub.end.toFixed(1)}s
+                            </span>
+                          </div>
+                          <p
+                            dir="rtl"
+                            className="mt-1.5 truncate text-sm text-[var(--text-muted)] font-[family-name:var(--font-arabic)]"
+                          >
+                            {sub.arabic}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {subtitlesState.tab === "style" && (
+                <div className="p-1">
+                  <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                    Subtitle Style
+                  </p>
+
+                  <div className="space-y-3">
+                    {SUBTITLE_STYLES.map((style) => {
+                      const isActive = subtitlesState.subtitleStyle === style.id;
+                      return (
+                        <button
+                          key={style.id}
+                          type="button"
+                          onClick={() => subtitlesState.setSubtitleStyle(style.id)}
+                          className={[
+                            "w-full rounded-2xl border p-3 text-left transition-all",
+                            isActive
+                              ? "border-[var(--gold-dim)] bg-[var(--surface-alt)] shadow-[0_14px_34px_rgba(212,168,83,0.08)]"
+                              : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
+                          ].join(" ")}
+                        >
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-sm font-medium text-[var(--text)]">
+                              {style.label}
                             </span>
                             {isActive && (
                               <span className="rounded-full bg-[var(--gold)] px-2 py-0.5 text-[10px] font-semibold text-[var(--bg)]">
@@ -953,481 +732,983 @@ export default function Home() {
                               </span>
                             )}
                           </div>
-                          <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-                            {preset.description}
-                          </p>
+
+                          <div
+                            data-subtitle-theme={style.id}
+                            className="subtitle-theme-surface rounded-md px-4 py-3 text-center"
+                          >
+                            <p
+                              dir="rtl"
+                              className="subtitle-theme-arabic text-lg leading-relaxed"
+                            >
+                              {"\u0628\u0650\u0633\u0652\u0645\u0650 \u0671\u0644\u0644\u0651\u064E\u0647\u0650 \u0671\u0644\u0631\u0651\u064E\u062D\u0652\u0645\u064E\u0640\u0670\u0646\u0650 \u0671\u0644\u0631\u0651\u064E\u062D\u0650\u064A\u0645\u0650"}
+                            </p>
+                            <p className="subtitle-theme-translation mt-1 text-xs italic">
+                              In the name of God, the Most Gracious, the Most
+                              Merciful
+                            </p>
+                          </div>
                         </button>
                       );
                     })}
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>
 
-        {/* ============================================================ */}
-        {/* WORKSPACE                                                    */}
-        {/* ============================================================ */}
-        <main className="flex flex-1 flex-col overflow-hidden bg-[var(--bg)]">
-          <div className="border-b border-[var(--border)] bg-[var(--surface)]/70 px-4 py-3">
-            <input
-              ref={media.videoInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={media.handleVideoUpload}
-            />
-            <input
-              ref={media.audioInputRef}
-              type="file"
-              accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.ogg,.webm"
-              className="hidden"
-              onChange={media.handleAudioUpload}
-            />
-
-            <div className="flex flex-wrap items-start gap-4">
-              <div className="min-w-[240px] flex-1">
-                <p className="font-mono-ui text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)]">
-                  Video Source
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => media.videoInputRef.current?.click()}
-                    className="flex items-center gap-2 rounded-lg bg-[var(--gold)] px-3.5 py-2 text-sm font-semibold text-[var(--bg)] transition-colors hover:bg-[var(--gold-light)]"
-                  >
-                    <Upload className="h-4 w-4" />
-                    <span>{media.videoSrc ? "Replace Clip" : "Upload Clip"}</span>
-                  </button>
-
-                  {media.videoSrc && (
-                    <button
-                      type="button"
-                      onClick={media.clearVideo}
-                      className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
-                    >
-                      <X className="h-4 w-4" />
-                      <span>Clear</span>
-                    </button>
-                  )}
-
-                  <span className="text-sm text-[var(--text-muted)]">
-                    {media.videoName ??
-                      "No clip loaded yet. Preview uses the design canvas."}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <input
-                    type="url"
-                    value={media.youtubeUrl}
-                    onChange={(event) => media.setYoutubeUrl(event.target.value)}
-                    placeholder="Paste a YouTube link"
-                    className="min-w-[240px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void media.importFromYouTube();
-                    }}
-                    disabled={media.youtubeImporting}
-                    className={[
-                      "flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold transition-colors",
-                      media.youtubeImporting
-                        ? "cursor-wait bg-[var(--border)] text-[var(--text-dim)]"
-                        : "bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
-                    ].join(" ")}
-                  >
-                    <Link2 className="h-4 w-4" />
-                    <span>
-                      {media.youtubeImporting ? "Importing..." : "Import Link"}
-                    </span>
-                  </button>
-                </div>
-
-                <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
-                  Paste a single YouTube video URL and Ayah Studio will import it
-                  locally with `yt-dlp`. Limit: {MAX_YOUTUBE_IMPORT_MB} MB.
-                </p>
-
-                {(media.videoDuration > 0 ||
-                  media.videoError ||
-                  media.youtubeImportError) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    {media.videoDuration > 0 && (
-                      <span className="font-mono-ui text-[var(--text-dim)]">
-                        Duration {media.videoDuration.toFixed(1)}s
-                      </span>
-                    )}
-                    {media.videoError && (
-                      <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
-                        {media.videoError}
-                      </span>
-                    )}
-                    {media.youtubeImportError && (
-                      <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
-                        {media.youtubeImportError}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="min-w-[240px] flex-1">
-                <p className="font-mono-ui text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)]">
-                  Audio Track
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => media.audioInputRef.current?.click()}
-                    className="flex items-center gap-2 rounded-lg bg-[var(--emerald)] px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--emerald-light)]"
-                  >
-                    <Upload className="h-4 w-4" />
-                    <span>{media.audioSrc ? "Replace Override" : "Override Audio"}</span>
-                  </button>
-
-                  {media.audioSrc && (
-                    <button
-                      type="button"
-                      onClick={media.clearAudio}
-                      className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
-                    >
-                      <X className="h-4 w-4" />
-                      <span>Clear Override</span>
-                    </button>
-                  )}
-
-                  <span className="text-sm text-[var(--text-muted)]">
-                    {media.audioSrc
-                      ? `Override track: ${media.audioName}`
-                      : media.videoName
-                        ? `Using clip audio from ${media.videoName}`
-                        : "Clip audio is used automatically. Override is optional."}
-                  </span>
-                </div>
-
-                {(media.audioDuration > 0 || media.audioError) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    {media.audioDuration > 0 && (
-                      <span className="font-mono-ui text-[var(--text-dim)]">
-                        Duration {media.audioDuration.toFixed(1)}s
-                      </span>
-                    )}
-                    {media.audioError && (
-                      <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
-                        {media.audioError}
-                      </span>
-                    )}
-                    {usingClipAudio && !media.audioError && (
-                      <span className="rounded-full bg-[var(--emerald)]/12 px-2.5 py-1 text-[var(--emerald-light)]">
-                        Using clip audio automatically
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="w-full max-w-[360px]">
-                <p className="font-mono-ui text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)]">
-                  Canvas Ratio
-                </p>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {ASPECT_RATIO_OPTIONS.map(({ id, label, hint, icon: Icon }) => {
-                    const isActive = subtitlesState.aspectRatio === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => subtitlesState.setAspectRatio(id)}
-                        className={[
-                          "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                          isActive
-                            ? "border-[var(--gold)] bg-[var(--gold)]/10 text-[var(--gold)]"
-                            : "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--text-muted)] hover:border-[var(--border-light)] hover:text-[var(--text)]",
-                        ].join(" ")}
-                      >
-                        <Icon className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0">
-                          <span className="font-mono-ui block text-xs font-semibold uppercase tracking-wider">
-                            {label}
+                  <div className="mt-6">
+                    <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                      Formatting
+                    </p>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                          <span className="font-mono-ui mb-1 block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Arabic Font
                           </span>
-                          <span className="block text-[11px] opacity-70">
-                            {hint}
+                          <select
+                            value={subtitlesState.subtitleFormatting.arabicFontFamily}
+                            onChange={(event) =>
+                              subtitlesState.updateSubtitleFormatting({
+                                arabicFontFamily: event.target.value as "amiri" | "naskh",
+                              })
+                            }
+                            className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+                          >
+                            {ARABIC_FONT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="font-mono-ui mb-1 block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Translation Font
+                          </span>
+                          <select
+                            value={subtitlesState.subtitleFormatting.translationFontFamily}
+                            onChange={(event) =>
+                              subtitlesState.updateSubtitleFormatting({
+                                translationFontFamily: event.target.value as "ui" | "mono",
+                              })
+                            }
+                            className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+                          >
+                            {TRANSLATION_FONT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <label className="mt-4 block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Arabic Size
+                          </span>
+                          <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                            {subtitlesState.subtitleFormatting.arabicFontSize}px
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={20}
+                          max={44}
+                          step={1}
+                          value={subtitlesState.subtitleFormatting.arabicFontSize}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              arabicFontSize: Number.parseInt(event.target.value, 10),
+                            })
+                          }
+                          className="w-full accent-[var(--gold)]"
+                        />
+                      </label>
+
+                      <label className="mt-4 block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Translation Size
+                          </span>
+                          <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                            {subtitlesState.subtitleFormatting.translationFontSize}px
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={12}
+                          max={28}
+                          step={1}
+                          value={subtitlesState.subtitleFormatting.translationFontSize}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              translationFontSize: Number.parseInt(event.target.value, 10),
+                            })
+                          }
+                          className="w-full accent-[var(--gold)]"
+                        />
+                      </label>
+
+                      <label className="mt-4 block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Arabic Color
+                          </span>
+                          <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                            {resolvedSubtitleColors.arabicColor}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={resolvedSubtitleColors.arabicColor}
+                            onChange={(event) =>
+                              subtitlesState.updateSubtitleFormatting({
+                                arabicColorOverride: event.target.value,
+                              })
+                            }
+                            className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--surface-alt)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              subtitlesState.updateSubtitleFormatting({
+                                arabicColorOverride: null,
+                              })
+                            }
+                            className="font-mono-ui rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+                          >
+                            Use Style Color
+                          </button>
+                        </div>
+                      </label>
+
+                      <label className="mt-4 block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Translation Color
+                          </span>
+                          <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                            {resolvedSubtitleColors.translationColor}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={resolvedSubtitleColors.translationColor}
+                            onChange={(event) =>
+                              subtitlesState.updateSubtitleFormatting({
+                                translationColorOverride: event.target.value,
+                              })
+                            }
+                            className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--surface-alt)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              subtitlesState.updateSubtitleFormatting({
+                                translationColorOverride: null,
+                              })
+                            }
+                            className="font-mono-ui rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+                          >
+                            Use Style Color
+                          </button>
+                        </div>
+                      </label>
+
+                      <label className="mt-4 flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={subtitlesState.subtitleFormatting.translationItalic}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              translationItalic: event.target.checked,
+                            })
+                          }
+                          className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--surface-alt)] accent-[var(--gold)]"
+                        />
+                        <span>
+                          <span className="block text-sm text-[var(--text)]">
+                            Italicize translation text
+                          </span>
+                          <span className="mt-1 block text-xs leading-relaxed text-[var(--text-dim)]">
+                            Applies to the preview and styled `.ASS` export.
                           </span>
                         </span>
+                      </label>
+
+                      <label className="mt-4 block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Background Opacity
+                          </span>
+                          <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                            {subtitlesState.subtitleFormatting.backgroundOpacity}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={subtitlesState.subtitleFormatting.backgroundOpacity}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              backgroundOpacity: Number.parseInt(event.target.value, 10),
+                            })
+                          }
+                          className="w-full accent-[var(--gold)]"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                      Long Ayah Handling
+                    </p>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <label className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={subtitlesState.subtitleFormatting.splitLongAyahs}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              splitLongAyahs: event.target.checked,
+                            })
+                          }
+                          className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--surface-alt)] accent-[var(--gold)]"
+                        />
+                        <span>
+                          <span className="block text-sm text-[var(--text)]">
+                            Split long ayahs into multiple timed subtitle chunks
+                          </span>
+                          <span className="mt-1 block text-xs leading-relaxed text-[var(--text-dim)]">
+                            Applies to new subtitle generation and detected ayah
+                            ranges.
+                          </span>
+                        </span>
+                      </label>
+
+                      <label className="mt-4 block">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                            Max Arabic Words Per Chunk
+                          </span>
+                          <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                            {subtitlesState.subtitleFormatting.maxWordsPerChunk}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={6}
+                          max={22}
+                          step={1}
+                          value={subtitlesState.subtitleFormatting.maxWordsPerChunk}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              maxWordsPerChunk: Number.parseInt(event.target.value, 10),
+                            })
+                          }
+                          className="w-full accent-[var(--gold)]"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                      Reciter Reference
+                    </p>
+                    <div className="space-y-1">
+                      {RECITERS.map((name) => (
+                        <div
+                          key={name}
+                          className="rounded-md px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--text)]"
+                        >
+                          {name}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                        Subtitle Position
+                      </p>
+                      <span className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)]">
+                        X {Math.round(subtitlesState.subtitlePlacement.x * 100)}%
+                        · Y {Math.round(subtitlesState.subtitlePlacement.y * 100)}%
+                      </span>
+                    </div>
+                    <p className="mb-3 text-xs leading-relaxed text-[var(--text-muted)]">
+                      Drag the live subtitle in the preview to fine-tune, or
+                      jump to a preset below.
+                    </p>
+                    <div className="space-y-2">
+                      {SUBTITLE_POSITION_PRESETS.map((preset) => {
+                        const isActive =
+                          Math.abs(
+                            subtitlesState.subtitlePlacement.x - preset.placement.x
+                          ) < 0.01 &&
+                          Math.abs(
+                            subtitlesState.subtitlePlacement.y - preset.placement.y
+                          ) < 0.01;
+
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() =>
+                              subtitlesState.setSubtitlePlacement(preset.placement)
+                            }
+                            className={[
+                              "w-full rounded-2xl border p-3 text-left transition-colors",
+                              isActive
+                                ? "border-[var(--gold-dim)] bg-[var(--surface-alt)]"
+                                : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
+                            ].join(" ")}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-mono-ui text-xs font-semibold uppercase tracking-[0.12em] text-[var(--gold)]">
+                                {preset.label}
+                              </span>
+                              {isActive && (
+                                <span className="rounded-full bg-[var(--gold)] px-2 py-0.5 text-[10px] font-semibold text-[var(--bg)]">
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+                              {preset.description}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          <main className="min-h-0 overflow-y-auto pr-1">
+            <div className="space-y-4 pb-1">
+              <section className="grid gap-3 lg:grid-cols-3">
+                <OverviewCard
+                  icon={Upload}
+                  label="Source"
+                  value={sourceSummary}
+                  detail={
+                    detectionSourceLabel
+                      ? detectionSourceLabel
+                      : "Upload or import a reciter clip to begin."
+                  }
+                />
+                <OverviewCard
+                  icon={Sparkles}
+                  label="Detection"
+                  value={detectionSummary}
+                  detail={`Engine: ${detectionProviderLabel}`}
+                  tone={bestDetection ? "accent" : "default"}
+                />
+                <OverviewCard
+                  icon={Layers}
+                  label="Subtitles"
+                  value={`${subtitlesState.subtitles.length} blocks`}
+                  detail={`${selectedAyahCount} ayahs selected · ${activeRatioOption.label} ${activeRatioOption.hint}`}
+                />
+              </section>
+
+              <section className="studio-panel-soft px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="section-kicker">Workflow</p>
+                    <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
+                      Move from source to final subtitle pass
+                    </h2>
+                    <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                      The shell now prioritizes the real editing loop: import,
+                      detect, refine, style, then export.
+                    </p>
+                  </div>
+                  {appliedDetection && (
+                    <span className="metric-pill">
+                      Applied {appliedDetection.surahName}{" "}
+                      {appliedDetection.startAyah}
+                      {appliedDetection.endAyah !== appliedDetection.startAyah
+                        ? `-${appliedDetection.endAyah}`
+                        : ""}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {workflowSteps.map((step) => (
+                    <WorkflowChip
+                      key={step.id}
+                      icon={step.icon}
+                      label={step.label}
+                      detail={step.detail}
+                      state={step.state}
+                    />
+                  ))}
+                </div>
+              </section>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+                <div className="min-h-0 space-y-4">
+                  <section className="studio-panel p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="section-kicker">Source Desk</p>
+                        <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
+                          Bring in footage, audio, and output intent
+                        </h2>
+                        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                          YouTube import, direct upload, clip-audio waveform,
+                          and aspect-ratio choices are all front-loaded here.
+                        </p>
+                      </div>
+                      <span className="metric-pill">
+                        Auto-detect on upload
+                      </span>
+                    </div>
+
+                    <input
+                      ref={media.videoInputRef}
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={media.handleVideoUpload}
+                    />
+                    <input
+                      ref={media.audioInputRef}
+                      type="file"
+                      accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.ogg,.webm"
+                      className="hidden"
+                      onChange={media.handleAudioUpload}
+                    />
+
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_320px]">
+                      <div className="studio-panel-soft p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="section-kicker">Video Source</p>
+                            <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
+                              {media.videoName
+                                ? media.videoName
+                                : "No clip loaded yet. Preview uses the design canvas."}
+                            </p>
+                          </div>
+                          {media.videoDuration > 0 && (
+                            <span className="metric-pill">
+                              {media.videoDuration.toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => media.videoInputRef.current?.click()}
+                            className="flex items-center gap-2 rounded-xl bg-[var(--gold)] px-3.5 py-2.5 text-sm font-semibold text-[var(--bg)] transition-colors hover:bg-[var(--gold-light)]"
+                          >
+                            <Upload className="h-4 w-4" />
+                            <span>
+                              {media.videoSrc ? "Replace Clip" : "Upload Clip"}
+                            </span>
+                          </button>
+
+                          {media.videoSrc && (
+                            <button
+                              type="button"
+                              onClick={media.clearVideo}
+                              className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
+                            >
+                              <X className="h-4 w-4" />
+                              <span>Clear</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <input
+                            type="url"
+                            value={media.youtubeUrl}
+                            onChange={(event) =>
+                              media.setYoutubeUrl(event.target.value)
+                            }
+                            placeholder="Paste a YouTube link"
+                            className="min-w-[220px] flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void media.importFromYouTube();
+                            }}
+                            disabled={media.youtubeImporting}
+                            className={[
+                              "flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors",
+                              media.youtubeImporting
+                                ? "cursor-wait bg-[var(--border)] text-[var(--text-dim)]"
+                                : "bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
+                            ].join(" ")}
+                          >
+                            <Link2 className="h-4 w-4" />
+                            <span>
+                              {media.youtubeImporting
+                                ? "Importing..."
+                                : "Import Link"}
+                            </span>
+                          </button>
+                        </div>
+
+                        <p className="mt-3 text-xs leading-relaxed text-[var(--text-dim)]">
+                          Paste a single YouTube video URL and Ayah Studio will
+                          import it locally with `yt-dlp`. Limit:{" "}
+                          {MAX_YOUTUBE_IMPORT_MB} MB.
+                        </p>
+
+                        {(media.videoError || media.youtubeImportError) && (
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                            {media.videoError && (
+                              <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
+                                {media.videoError}
+                              </span>
+                            )}
+                            {media.youtubeImportError && (
+                              <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
+                                {media.youtubeImportError}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="studio-panel-soft p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="section-kicker">Audio Track</p>
+                            <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
+                              {media.audioSrc
+                                ? `Override track: ${media.audioName}`
+                                : media.videoName
+                                  ? `Using clip audio from ${media.videoName}`
+                                  : "Clip audio is used automatically. Override is optional."}
+                            </p>
+                          </div>
+                          {media.audioDuration > 0 && (
+                            <span className="metric-pill">
+                              {media.audioDuration.toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => media.audioInputRef.current?.click()}
+                            className="flex items-center gap-2 rounded-xl bg-[var(--emerald)] px-3.5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--emerald-light)]"
+                          >
+                            <Upload className="h-4 w-4" />
+                            <span>
+                              {media.audioSrc
+                                ? "Replace Override"
+                                : "Override Audio"}
+                            </span>
+                          </button>
+
+                          {media.audioSrc && (
+                            <button
+                              type="button"
+                              onClick={media.clearAudio}
+                              className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
+                            >
+                              <X className="h-4 w-4" />
+                              <span>Clear Override</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                          {media.audioError && (
+                            <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
+                              {media.audioError}
+                            </span>
+                          )}
+                          {usingClipAudio && !media.audioError && (
+                            <span className="rounded-full bg-[var(--emerald)]/12 px-2.5 py-1 text-[var(--emerald-light)]">
+                              Using clip audio automatically
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="studio-panel-soft p-4">
+                        <p className="section-kicker">Canvas Ratio</p>
+                        <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
+                          Pick the delivery format first so placement and safe
+                          zones stay honest while editing.
+                        </p>
+                        <div className="mt-4 grid grid-cols-3 gap-2">
+                          {ASPECT_RATIO_OPTIONS.map(
+                            ({ id, label, hint, icon: Icon }) => {
+                              const isActive = subtitlesState.aspectRatio === id;
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  onClick={() => subtitlesState.setAspectRatio(id)}
+                                  className={[
+                                    "flex items-center gap-2 rounded-xl border px-3 py-3 text-left transition-colors",
+                                    isActive
+                                      ? "border-[var(--gold)] bg-[var(--gold)]/10 text-[var(--gold)]"
+                                      : "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--text-muted)] hover:border-[var(--border-light)] hover:text-[var(--text)]",
+                                  ].join(" ")}
+                                >
+                                  <Icon className="h-4 w-4 shrink-0" />
+                                  <span className="min-w-0">
+                                    <span className="font-mono-ui block text-xs font-semibold uppercase tracking-wider">
+                                      {label}
+                                    </span>
+                                    <span className="block text-[11px] opacity-70">
+                                      {hint}
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="studio-panel p-4">
+                    <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="section-kicker">Preview Stage</p>
+                        <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
+                          Compose subtitles against the live frame
+                        </h2>
+                        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                          Safe-zone guides, ratio-aware subtitle widths, and drag
+                          placement make the caption pass easier to trust.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="metric-pill">
+                          {activeRatioOption.label} · {activeRatioOption.hint}
+                        </span>
+                        <span className="metric-pill">
+                          {playing ? "Playing" : "Paused"}
+                        </span>
+                        {previewSubtitle && (
+                          <span className="metric-pill">
+                            {previewSubtitle.label ?? `Ayah ${previewSubtitle.ayahNum}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <VideoPreview
+                      subtitles={subtitlesState.subtitles}
+                      currentTime={currentTime}
+                      subtitleStyleId={subtitlesState.subtitleStyle}
+                      subtitleFormatting={subtitlesState.subtitleFormatting}
+                      subtitlePlacement={subtitlesState.subtitlePlacement}
+                      playbackMode={playbackMode}
+                      aspectRatio={subtitlesState.aspectRatio}
+                      videoSrc={media.videoSrc}
+                      videoName={media.videoName}
+                      videoError={media.videoError}
+                      playing={playing}
+                      onPlayPause={togglePlayPause}
+                      onTimeChange={setCurrentTime}
+                      onDurationChange={media.setVideoDuration}
+                      onPlayingChange={setPlaying}
+                      onVideoError={media.setVideoError}
+                      onSubtitlePlacementChange={subtitlesState.setSubtitlePlacement}
+                      previewSubtitle={previewSubtitle}
+                    />
+                  </section>
+
+                  <AudioWaveform
+                    audioSrc={activeAudioSrc}
+                    audioName={activeAudioName}
+                    audioDuration={media.audioDuration}
+                    usingClipAudio={usingClipAudio}
+                    hasOverride={Boolean(media.audioSrc)}
+                    currentTime={currentTime}
+                    playing={playing}
+                    onTimeChange={setCurrentTime}
+                    onDurationChange={media.setAudioDuration}
+                    onPlayingChange={setPlaying}
+                    onAudioError={media.setAudioError}
+                  />
+
+                  <section className="studio-panel-soft p-4">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="section-kicker">Timeline</p>
+                        <h3 className="mt-2 text-base font-semibold text-[var(--text)]">
+                          Refine timing against the playhead
+                        </h3>
+                      </div>
+                      <p className="max-w-xs text-right text-xs leading-relaxed text-[var(--text-dim)]">
+                        Drag block edges for quick timing fixes or use the
+                        inspector buttons for exact playhead snapping.
+                      </p>
+                    </div>
+
+                    <TimelineTrack
+                      subtitles={subtitlesState.subtitles}
+                      currentTime={currentTime}
+                      totalDuration={totalDuration}
+                      selectedIdx={subtitlesState.selectedSubIdx}
+                      onSelect={(idx) => {
+                        subtitlesState.setSelectedSubIdx(idx);
+                        setCurrentTime(subtitlesState.subtitles[idx].start);
+                      }}
+                      onSeek={setCurrentTime}
+                      onResizeSubtitle={handleSubtitleBoundaryChange}
+                    />
+                  </section>
+                </div>
+
+                <div className="min-h-0 space-y-4">
+                  <section className="studio-panel p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="section-kicker">Ayah Detection</p>
+                        <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
+                          Detection runs in the background, but stays inspectable
+                        </h2>
+                        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                          {detectionSourceLabel
+                            ? `Ayah detection runs automatically on ${detectionSourceLabel}.`
+                            : "Upload a reciter clip first and Ayah Studio will detect the ayah range from its audio track automatically."}
+                        </p>
+                        <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
+                          Applies detected ranges across the real clip duration
+                          instead of falling back to a fixed seconds-per-ayah
+                          guess. Upload limit: {MAX_AYAH_DETECT_UPLOAD_MB} MB.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleDetectAyahs}
+                        disabled={!detectionSourceFile || detection.detectingAyahs}
+                        className={[
+                          "flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors",
+                          detectionSourceFile && !detection.detectingAyahs
+                            ? "bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-light)]"
+                            : "cursor-not-allowed bg-[var(--border)] text-[var(--text-dim)]",
+                        ].join(" ")}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        <span>
+                          {detection.detectingAyahs
+                            ? "Detecting..."
+                            : "Re-run Detection"}
+                        </span>
                       </button>
-                    );
-                  })}
+                    </div>
+
+                    {detection.detectingAyahs && (
+                      <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
+                        <p className="text-sm text-[var(--text-muted)]">
+                          Extracting clip audio, transcribing the recitation, and
+                          matching the ayah range...
+                        </p>
+                      </div>
+                    )}
+
+                    {detection.detectionError && (
+                      <div className="mt-4 rounded-2xl border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
+                        {detection.detectionError}
+                      </div>
+                    )}
+
+                    {appliedDetection && (
+                      <div className="mt-4 rounded-2xl border border-[var(--emerald)]/35 bg-[var(--emerald)]/10 px-4 py-3">
+                        <p className="text-sm font-semibold text-[var(--emerald-light)]">
+                          {detection.appliedDetectionMode === "auto"
+                            ? "Auto-detected and applied"
+                            : "Detected and applied"}
+                          : {appliedDetection.surahName}{" "}
+                          {appliedDetection.startAyah}
+                          {appliedDetection.endAyah !== appliedDetection.startAyah
+                            ? `-${appliedDetection.endAyah}`
+                            : ""}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--text-dim)]">
+                          {detection.appliedDetectionMode === "auto"
+                            ? "Ayah Studio picked the top match automatically because the confidence was clearly stronger than the alternatives."
+                            : "You selected this detected range and Ayah Studio generated timed subtitles from it."}
+                        </p>
+                      </div>
+                    )}
+
+                    {detection.detectionResult && (
+                      <div className="mt-4 space-y-4">
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="section-kicker">Transcript</p>
+                            {bestDetection && (
+                              <span className="rounded-full bg-[var(--gold)]/12 px-2.5 py-1 text-[11px] text-[var(--gold-light)]">
+                                {Math.round(bestDetection.score * 100)}% match
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            dir="rtl"
+                            className="mt-3 font-arabic-ui text-lg leading-loose text-[var(--text)]"
+                          >
+                            {detection.detectionResult.transcript}
+                          </p>
+                          {detection.detectionResult.warning && (
+                            <p className="mt-3 text-xs leading-relaxed text-[var(--text-dim)]">
+                              {detection.detectionResult.warning}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="section-kicker">Suggested Ranges</p>
+                          <div className="mt-3 space-y-2">
+                            {detection.detectionResult.matches.length === 0 ? (
+                              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                                No confident ayah match yet. Try a cleaner clip
+                                or upload a dedicated recitation audio track.
+                              </div>
+                            ) : (
+                              detection.detectionResult.matches.map((match) => {
+                                const matchKey = getDetectionKey(match);
+                                const isApplied =
+                                  detection.appliedDetectionKey === matchKey;
+
+                                return (
+                                  <div
+                                    key={matchKey}
+                                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-[var(--text)]">
+                                          {match.surahName}
+                                        </p>
+                                        <p className="font-arabic-ui mt-0.5 text-base text-[var(--gold)]">
+                                          {match.surahArabicName}
+                                        </p>
+                                        <p className="mt-1 text-xs text-[var(--text-muted)]">
+                                          Ayah {match.startAyah}
+                                          {match.endAyah !== match.startAyah
+                                            ? `-${match.endAyah}`
+                                            : ""}{" "}
+                                          · {Math.round(match.score * 100)}%
+                                        </p>
+                                        {match.timingSource && (
+                                          <p className="mt-1 text-[11px] text-[var(--emerald-light)]">
+                                            {getTimingSourceLabel(match.timingSource)}
+                                          </p>
+                                        )}
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          void applyDetectedMatch(match);
+                                        }}
+                                        className={[
+                                          "shrink-0 rounded-xl px-3 py-2 text-xs font-semibold transition-colors",
+                                          isApplied
+                                            ? "bg-[var(--gold)] text-[var(--bg)]"
+                                            : "bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
+                                        ].join(" ")}
+                                      >
+                                        {isApplied
+                                          ? "Applied + Timed"
+                                          : "Apply + Auto-time"}
+                                      </button>
+                                    </div>
+
+                                    <p
+                                      dir="rtl"
+                                      className="mt-3 line-clamp-3 font-arabic-ui text-sm leading-loose text-[var(--text-muted)]"
+                                    >
+                                      {match.matchedText}
+                                    </p>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {subtitlesState.selectedSubIdx !== null &&
+                  subtitlesState.subtitles[subtitlesState.selectedSubIdx] ? (
+                    <SubtitleEditor
+                      subtitle={
+                        subtitlesState.subtitles[subtitlesState.selectedSubIdx]
+                      }
+                      currentTime={currentTime}
+                      onChange={subtitlesState.handleSubtitleChange}
+                      onDelete={subtitlesState.handleSubtitleDelete}
+                      onSetStartToPlayhead={() =>
+                        handleSetSelectedBoundaryToPlayhead("start")
+                      }
+                      onSetEndToPlayhead={() =>
+                        handleSetSelectedBoundaryToPlayhead("end")
+                      }
+                    />
+                  ) : (
+                    <section className="studio-panel-soft px-5 py-6">
+                      <p className="section-kicker">Inspector</p>
+                      <h3 className="mt-2 text-base font-semibold text-[var(--text)]">
+                        Subtitle editor becomes active when you select a block
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
+                        {subtitlesState.subtitles.length > 0
+                          ? "Select a subtitle on the timeline or sidebar to edit timing and text."
+                          : "Generate subtitles first, then use the inspector for timing and wording cleanup."}
+                      </p>
+                    </section>
+                  )}
+
+                  <section className="studio-panel-soft px-5 py-5">
+                    <p className="section-kicker">Readability Notes</p>
+                    <div className="mt-3 space-y-3 text-sm leading-relaxed text-[var(--text-muted)]">
+                      <p>
+                        Keep captions in the lower third by default, then move
+                        upward only when baked-in graphics or the reciter frame
+                        demand it.
+                      </p>
+                      <p>
+                        Split long ayahs aggressively on vertical formats so the
+                        Arabic stays readable without shrinking the type too far.
+                      </p>
+                      <p>
+                        Use high contrast and generous line spacing before adding
+                        more ornament. Clarity is the priority for recitation
+                        clips.
+                      </p>
+                    </div>
+                  </section>
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="border-b border-[var(--border)] bg-[var(--surface)]/45 px-4 py-3">
-            <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
-                    Ayah Detection
-                  </p>
-                  <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-                    {detectionSourceLabel
-                      ? `Ayah detection runs automatically on ${detectionSourceLabel}.`
-                      : "Upload a reciter clip first and Ayah Studio will detect the ayah range from its audio track automatically."}
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
-                    Uses local ffmpeg extraction plus the Tarteel Whisper Quran model
-                    through Hugging Face when a token is configured.
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
-                    Applying a detected range now auto-generates subtitles across the
-                    current clip duration instead of using the fixed seconds-per-ayah
-                    guess.
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
-                    Detection upload limit: {MAX_AYAH_DETECT_UPLOAD_MB} MB per
-                    request.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleDetectAyahs}
-                  disabled={!detectionSourceFile || detection.detectingAyahs}
-                  className={[
-                    "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
-                    detectionSourceFile && !detection.detectingAyahs
-                      ? "bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-light)]"
-                      : "cursor-not-allowed bg-[var(--border)] text-[var(--text-dim)]",
-                  ].join(" ")}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  <span>
-                    {detection.detectingAyahs ? "Detecting..." : "Re-run Detection"}
-                  </span>
-                </button>
-              </div>
-
-              {detection.detectingAyahs && (
-                <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Extracting clip audio, transcribing the recitation, and matching the ayah range...
-                  </p>
-                </div>
-              )}
-
-              {detection.detectionError && (
-                <div className="mt-4 rounded-lg border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
-                  {detection.detectionError}
-                </div>
-              )}
-
-              {appliedDetection && (
-                <div className="mt-4 rounded-lg border border-[var(--emerald)]/35 bg-[var(--emerald)]/10 px-4 py-3">
-                  <p className="text-sm font-semibold text-[var(--emerald-light)]">
-                    {detection.appliedDetectionMode === "auto"
-                      ? "Auto-detected and applied"
-                      : "Detected and applied"}
-                    : {appliedDetection.surahName} {appliedDetection.startAyah}
-                    {appliedDetection.endAyah !== appliedDetection.startAyah
-                      ? `-${appliedDetection.endAyah}`
-                      : ""}
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-dim)]">
-                    {detection.appliedDetectionMode === "auto"
-                      ? "Ayah Studio picked the top match automatically because the confidence was clearly stronger than the alternatives."
-                      : "You selected this detected range and Ayah Studio generated timed subtitles from it."}
-                  </p>
-                </div>
-              )}
-
-              {detection.detectionResult && (
-                <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
-                        Transcript
-                      </p>
-                      {bestDetection && (
-                        <span className="rounded-full bg-[var(--gold)]/12 px-2.5 py-1 text-[11px] text-[var(--gold-light)]">
-                          {Math.round(bestDetection.score * 100)}% match confidence
-                        </span>
-                      )}
-                    </div>
-                    <p
-                      dir="rtl"
-                      className="mt-3 font-arabic-ui text-lg leading-loose text-[var(--text)]"
-                    >
-                      {detection.detectionResult.transcript}
-                    </p>
-                    {detection.detectionResult.warning && (
-                      <p className="mt-3 text-xs leading-relaxed text-[var(--text-dim)]">
-                        {detection.detectionResult.warning}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
-                      Suggested Ranges
-                    </p>
-                    <div className="mt-3 space-y-2">
-                      {detection.detectionResult.matches.length === 0 ? (
-                        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                          No confident ayah match yet. Try a cleaner clip or upload a dedicated recitation audio track.
-                        </div>
-                      ) : (
-                        detection.detectionResult.matches.map((match) => {
-                          const matchKey = getDetectionKey(match);
-                          const isApplied =
-                            detection.appliedDetectionKey === matchKey;
-
-                          return (
-                            <div
-                              key={matchKey}
-                              className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-[var(--text)]">
-                                    {match.surahName}
-                                  </p>
-                                  <p className="font-arabic-ui mt-0.5 text-base text-[var(--gold)]">
-                                    {match.surahArabicName}
-                                  </p>
-                                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                                    Ayah {match.startAyah}
-                                    {match.endAyah !== match.startAyah
-                                      ? `-${match.endAyah}`
-                                      : ""}{" "}
-                                    · {Math.round(match.score * 100)}%
-                                  </p>
-                                  {match.timingSource && (
-                                    <p className="mt-1 text-[11px] text-[var(--emerald-light)]">
-                                      {getTimingSourceLabel(match.timingSource)}
-                                    </p>
-                                  )}
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    void applyDetectedMatch(match);
-                                  }}
-                                  className={[
-                                    "shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
-                                    isApplied
-                                      ? "bg-[var(--gold)] text-[var(--bg)]"
-                                      : "bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
-                                  ].join(" ")}
-                                >
-                                  {isApplied ? "Applied + Timed" : "Apply + Auto-time"}
-                                </button>
-                              </div>
-
-                              <p
-                                dir="rtl"
-                                className="mt-3 line-clamp-3 font-arabic-ui text-sm leading-loose text-[var(--text-muted)]"
-                              >
-                                {match.matchedText}
-                              </p>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
-          </div>
-
-          {/* Video Preview */}
-          <div className="p-4 pb-2">
-            <VideoPreview
-              subtitles={subtitlesState.subtitles}
-              currentTime={currentTime}
-              subtitleStyleId={subtitlesState.subtitleStyle}
-              subtitleFormatting={subtitlesState.subtitleFormatting}
-              subtitlePlacement={subtitlesState.subtitlePlacement}
-              playbackMode={playbackMode}
-              aspectRatio={subtitlesState.aspectRatio}
-              videoSrc={media.videoSrc}
-              videoName={media.videoName}
-              videoError={media.videoError}
-              playing={playing}
-              onPlayPause={togglePlayPause}
-              onTimeChange={setCurrentTime}
-              onDurationChange={media.setVideoDuration}
-              onPlayingChange={setPlaying}
-              onVideoError={media.setVideoError}
-              onSubtitlePlacementChange={subtitlesState.setSubtitlePlacement}
-              previewSubtitle={previewSubtitle}
-            />
-          </div>
-
-          <div className="px-4 py-2">
-            <AudioWaveform
-              audioSrc={activeAudioSrc}
-              audioName={activeAudioName}
-              audioDuration={media.audioDuration}
-              usingClipAudio={usingClipAudio}
-              hasOverride={Boolean(media.audioSrc)}
-              currentTime={currentTime}
-              playing={playing}
-              onTimeChange={setCurrentTime}
-              onDurationChange={media.setAudioDuration}
-              onPlayingChange={setPlaying}
-              onAudioError={media.setAudioError}
-            />
-          </div>
-
-          {/* Timeline */}
-          <div className="px-4 py-2">
-            <TimelineTrack
-              subtitles={subtitlesState.subtitles}
-              currentTime={currentTime}
-              totalDuration={totalDuration}
-              selectedIdx={subtitlesState.selectedSubIdx}
-              onSelect={(idx) => {
-                subtitlesState.setSelectedSubIdx(idx);
-                setCurrentTime(subtitlesState.subtitles[idx].start);
-              }}
-              onSeek={setCurrentTime}
-              onResizeSubtitle={handleSubtitleBoundaryChange}
-            />
-          </div>
-
-          {/* Subtitle Editor or Empty State */}
-          <div className="flex-1 overflow-y-auto px-4 py-2">
-            {subtitlesState.selectedSubIdx !== null &&
-            subtitlesState.subtitles[subtitlesState.selectedSubIdx] ? (
-              <SubtitleEditor
-                subtitle={subtitlesState.subtitles[subtitlesState.selectedSubIdx]}
-                currentTime={currentTime}
-                onChange={subtitlesState.handleSubtitleChange}
-                onDelete={subtitlesState.handleSubtitleDelete}
-                onSetStartToPlayhead={() =>
-                  handleSetSelectedBoundaryToPlayhead("start")
-                }
-                onSetEndToPlayhead={() =>
-                  handleSetSelectedBoundaryToPlayhead("end")
-                }
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                  {subtitlesState.subtitles.length > 0
-                    ? "Select a subtitle on the timeline or sidebar to edit"
-                    : "Select ayahs from the sidebar to get started"}
-                </p>
-              </div>
-            )}
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
 
       {/* ============================================================ */}
@@ -1449,6 +1730,70 @@ export default function Home() {
 
 function getDetectionKey(match: AyahDetectionMatch): string {
   return `${match.surahNumber}:${match.startAyah}:${match.endAyah}`;
+}
+
+function OverviewCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  icon: typeof Upload;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "default" | "accent";
+}) {
+  return (
+    <div className="studio-panel-soft flex items-start gap-3 px-4 py-4">
+      <div
+        className={[
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+          tone === "accent"
+            ? "border-[var(--gold)]/35 bg-[var(--gold)]/12 text-[var(--gold-light)]"
+            : "border-[var(--border)] bg-black/10 text-[var(--text-muted)]",
+        ].join(" ")}
+      >
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="section-kicker">{label}</p>
+        <p className="mt-2 text-base font-semibold text-[var(--text)]">{value}</p>
+        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+          {detail}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function WorkflowChip({
+  icon: Icon,
+  label,
+  detail,
+  state,
+}: {
+  icon: typeof Upload;
+  label: string;
+  detail: string;
+  state: "done" | "active" | "pending";
+}) {
+  return (
+    <div className="workflow-chip" data-state={state}>
+      <div className="workflow-chip-icon">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="font-mono-ui text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text)]">
+          {label}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+          {detail}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function shouldAutoApplyDetection(

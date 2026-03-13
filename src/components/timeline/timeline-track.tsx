@@ -113,9 +113,10 @@ export default function TimelineTrack({
   return (
     <div
       ref={trackRef}
-      className="relative h-[60px] w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-alt)]"
+      className="relative h-[78px] w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,rgba(26,31,42,0.96),rgba(16,20,28,0.94))]"
       onClick={handleSeek}
     >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white/3 to-transparent" />
       {/* Time markers */}
       {timeMarkers.map((t) => {
         const leftPercent = totalDuration > 0 ? (t / totalDuration) * 100 : 0;
@@ -125,8 +126,8 @@ export default function TimelineTrack({
             className="absolute top-0 h-full"
             style={{ left: `${leftPercent}%` }}
           >
-            <div className="h-full w-px bg-[var(--border)]" />
-            <span className="font-mono-ui absolute bottom-[2px] left-[3px] select-none text-[9px] text-[var(--text-dim)]">
+            <div className="h-full w-px bg-[var(--border)]/75" />
+            <span className="font-mono-ui absolute bottom-[4px] left-[6px] select-none text-[9px] text-[var(--text-dim)]">
               {formatTime(t)}
             </span>
           </div>
@@ -137,7 +138,7 @@ export default function TimelineTrack({
         className="pointer-events-none absolute inset-y-0 z-[2] w-px bg-[var(--gold-light)]"
         style={{ left: `${playheadPercent}%` }}
       >
-        <div className="absolute -left-[4px] top-1 h-2 w-2 rounded-full border border-[var(--bg)] bg-[var(--gold-light)]" />
+        <div className="absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full border border-[var(--bg)] bg-[var(--gold-light)] shadow-[0_0_0_4px_rgba(212,168,83,0.18)]" />
       </div>
 
       {/* Subtitle blocks */}
@@ -159,9 +160,9 @@ export default function TimelineTrack({
               onSelect(idx);
             }}
             className={[
-              "font-mono-ui absolute top-[12px] z-[3] flex h-[36px] cursor-pointer items-center justify-center rounded-sm border px-1 transition-colors",
+              "font-mono-ui absolute top-[16px] z-[3] flex h-[38px] cursor-pointer items-center justify-center rounded-xl border px-1.5 transition-colors",
               isSelected
-                ? "border-[var(--gold-light)] bg-[var(--gold)] text-[var(--bg)]"
+                ? "border-[var(--gold-light)] bg-[var(--gold)] text-[var(--bg)] shadow-[0_12px_30px_rgba(212,168,83,0.28)]"
                 : "border-transparent bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
             ].join(" ")}
             style={{
@@ -178,7 +179,7 @@ export default function TimelineTrack({
                     event.stopPropagation();
                     resizeStateRef.current = { idx, edge: "start" };
                   }}
-                  className="absolute inset-y-0 left-0 w-2 cursor-ew-resize rounded-l-sm bg-black/15 hover:bg-black/25"
+                  className="absolute inset-y-0 left-0 w-2.5 cursor-ew-resize rounded-l-xl bg-black/15 hover:bg-black/25"
                 />
                 <span
                   role="presentation"
@@ -187,11 +188,11 @@ export default function TimelineTrack({
                     event.stopPropagation();
                     resizeStateRef.current = { idx, edge: "end" };
                   }}
-                  className="absolute inset-y-0 right-0 w-2 cursor-ew-resize rounded-r-sm bg-black/15 hover:bg-black/25"
+                  className="absolute inset-y-0 right-0 w-2.5 cursor-ew-resize rounded-r-xl bg-black/15 hover:bg-black/25"
                 />
               </>
             )}
-            <span className="truncate text-[10px] font-bold">
+            <span className="truncate px-2 text-[10px] font-bold tracking-[0.04em]">
               {sub.label ?? sub.ayahNum}
             </span>
           </button>

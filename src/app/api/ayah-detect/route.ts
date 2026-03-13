@@ -228,6 +228,7 @@ async function enrichMatchWithTiming(
       transcriptChunks,
       silenceRanges,
       chunkAlignedTimings[0]?.start,
+      clipDuration,
       transcript
     );
 
@@ -254,6 +255,7 @@ async function enrichMatchWithTiming(
     transcriptChunks,
     silenceRanges,
     timings.segments[0]?.start,
+    clipDuration,
     transcript
   );
 
@@ -1140,6 +1142,7 @@ async function hydrateLeadingSegmentsForMatch(
   transcriptChunks: TranscriptChunk[],
   silenceRanges: SilenceRange[],
   firstTimingStart: number | undefined,
+  clipDuration: number,
   transcript?: string
 ) {
   const clampedLeadingSegments = clampLeadingSegmentsToFirstTiming(

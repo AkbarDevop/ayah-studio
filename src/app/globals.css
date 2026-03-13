@@ -25,9 +25,17 @@
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(46, 139, 110, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(212, 168, 83, 0.16), transparent 24%),
+    linear-gradient(180deg, #111722 0%, #0c0f14 42%, #080b10 100%);
   color: var(--text);
   font-family: var(--font-ui), system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(212, 168, 83, 0.28);
+  color: var(--text);
 }
 
 .font-mono-ui {
@@ -44,6 +52,109 @@ body {
 
 .preview-canvas-bg {
   background: radial-gradient(ellipse at center, #1a2035 0%, #0c0f14 70%);
+}
+
+.studio-shell {
+  position: relative;
+}
+
+.studio-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05), transparent 30%);
+  mask-image: linear-gradient(180deg, black, rgba(0, 0, 0, 0.4));
+}
+
+.studio-panel,
+.studio-panel-soft {
+  border-radius: 1.5rem;
+  border: 1px solid rgba(58, 64, 85, 0.75);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.studio-panel {
+  background:
+    linear-gradient(180deg, rgba(22, 27, 36, 0.96), rgba(14, 18, 25, 0.94)),
+    var(--surface);
+}
+
+.studio-panel-soft {
+  background:
+    linear-gradient(180deg, rgba(20, 24, 32, 0.84), rgba(15, 19, 27, 0.82)),
+    var(--surface);
+  backdrop-filter: blur(12px);
+}
+
+.section-kicker {
+  font-family: var(--font-ibm-plex), monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(58, 64, 85, 0.85);
+  background: rgba(26, 31, 42, 0.78);
+  padding: 0.45rem 0.75rem;
+  font-family: var(--font-ibm-plex), monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.workflow-chip {
+  display: inline-flex;
+  min-width: 11.5rem;
+  align-items: center;
+  gap: 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(58, 64, 85, 0.78);
+  background: rgba(18, 23, 31, 0.86);
+  padding: 0.85rem 1rem;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.workflow-chip[data-state="done"] {
+  border-color: rgba(46, 139, 110, 0.55);
+  background: rgba(46, 139, 110, 0.12);
+}
+
+.workflow-chip[data-state="active"] {
+  border-color: rgba(212, 168, 83, 0.6);
+  background: rgba(212, 168, 83, 0.12);
+  transform: translateY(-1px);
+}
+
+.workflow-chip[data-state="pending"] {
+  opacity: 0.82;
+}
+
+.workflow-chip-icon {
+  display: flex;
+  height: 2.35rem;
+  width: 2.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--gold-light);
 }
 
 .preview-stage {
@@ -69,15 +180,60 @@ body {
 
 .preview-stage-frame {
   overflow: hidden;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border);
+  border-radius: 1rem;
+  border: 1px solid rgba(58, 64, 85, 0.72);
   background: #080b10;
   isolation: isolate;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 70px rgba(0, 0, 0, 0.35);
 }
 
 .glass-overlay {
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(6px);
+}
+
+.preview-safe-frame {
+  position: absolute;
+  inset: 8%;
+  z-index: 5;
+  border: 1px dashed rgba(232, 228, 220, 0.14);
+  border-radius: 1rem;
+  pointer-events: none;
+}
+
+.preview-safe-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  z-index: 5;
+  border-top: 1px dashed rgba(232, 228, 220, 0.12);
+  pointer-events: none;
+}
+
+.preview-safe-line[data-line="upper"] {
+  top: 33.333%;
+}
+
+.preview-safe-line[data-line="lower"] {
+  top: 66.666%;
+}
+
+.preview-stage-caption {
+  max-width: 52rem;
+}
+
+.preview-stage-caption[data-preview-ratio="landscape"] {
+  width: min(72%, 52rem);
+}
+
+.preview-stage-caption[data-preview-ratio="portrait"] {
+  width: min(86%, 22rem);
+}
+
+.preview-stage-caption[data-preview-ratio="square"] {
+  width: min(80%, 33rem);
 }
 
 .modal-backdrop {

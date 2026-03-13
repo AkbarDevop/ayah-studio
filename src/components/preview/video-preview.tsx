@@ -91,6 +91,17 @@ function formatDisplayTime(seconds: number): string {
   return `${m}:${s}`;
 }
 
+function getAspectRatioLabel(aspectRatio: AspectRatioPreset) {
+  switch (aspectRatio) {
+    case "portrait":
+      return "9:16 Reels";
+    case "square":
+      return "1:1 Feed";
+    default:
+      return "16:9 YouTube";
+  }
+}
+
 export default function VideoPreview({
   subtitles,
   currentTime,
@@ -147,6 +158,10 @@ export default function VideoPreview({
         return applyOpacityToColor("rgba(0,0,0,0.7)", subtitleFormatting.backgroundOpacity);
     }
   }, [subtitleFormatting.backgroundOpacity, subtitleStyleId]);
+  const aspectRatioLabel = useMemo(
+    () => getAspectRatioLabel(aspectRatio),
+    [aspectRatio]
+  );
 
   useEffect(() => {
     const video = videoRef.current;
@@ -345,6 +360,10 @@ export default function VideoPreview({
           {formatDisplayTime(currentTime)}
         </div>
 
+        <div className="glass-overlay font-mono-ui absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+          {aspectRatioLabel}
+        </div>
+
         {/* Play/Pause — top right */}
         <button
           type="button"
@@ -360,6 +379,10 @@ export default function VideoPreview({
         >
           {playing ? <Pause size={14} /> : <Play size={14} />}
         </button>
+
+        <div className="preview-safe-frame" />
+        <div className="preview-safe-line" data-line="upper" />
+        <div className="preview-safe-line" data-line="lower" />
 
         {/* Empty state */}
         {!videoSrc && subtitles.length === 0 && (
@@ -423,13 +446,14 @@ export default function VideoPreview({
             ref={subtitleRef}
             onPointerDown={handleSubtitlePointerDown}
             data-subtitle-theme={subtitleStyleId}
-            className="subtitle-theme-surface absolute z-10 w-[72%] max-w-[820px] -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-lg px-5 py-3 text-center backdrop-blur-sm active:cursor-grabbing"
+            data-preview-ratio={aspectRatio}
+            className="preview-stage-caption subtitle-theme-surface absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-2xl border border-white/10 px-5 py-3 text-center shadow-2xl shadow-black/40 backdrop-blur-md active:cursor-grabbing"
             style={{
               left: `${subtitlePlacement.x * 100}%`,
               top: `${subtitlePlacement.y * 100}%`,
               background: overlayBackground,
             }}
-          >
+            >
             <div className="font-mono-ui mb-2 inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               <Move className="h-3 w-3" />
               Drag
