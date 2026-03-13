@@ -4,6 +4,7 @@ import type {
   SubtitlePlacement,
 } from "@/types";
 import { SUBTITLE_STYLES } from "./constants";
+import { normalizeSubtitleTimings } from "./subtitle-timing";
 
 function formatSRTTime(seconds: number): string {
   const h = String(Math.floor(seconds / 3600)).padStart(2, "0");
@@ -22,7 +23,7 @@ function formatASSTime(seconds: number): string {
 }
 
 export function generateSRT(subtitles: Subtitle[]): string {
-  return subtitles
+  return normalizeSubtitleTimings(subtitles)
     .map(
       (sub, i) =>
         `${i + 1}\n${formatSRTTime(sub.start)} --> ${formatSRTTime(sub.end)}\n${sub.arabic}\n${sub.translation}\n`
@@ -36,6 +37,7 @@ export function generateASS(
   placement: SubtitlePlacement,
   aspectRatio: AspectRatioPreset
 ): string {
+  const safeSubtitles = normalizeSubtitleTimings(subtitles);
   const st =
     SUBTITLE_STYLES.find((s) => s.id === styleId) || SUBTITLE_STYLES[0];
   const { width: playResX, height: playResY } = getAssResolution(aspectRatio);
@@ -49,7 +51,7 @@ export function generateASS(
   output += `Style: Translation,Arial,28,${rgbToAssBgr("#E8E4DC")},&H80000000,0,5,30,30,30,1\n\n`;
   output += `[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
 
-  subtitles.forEach((sub) => {
+  safeSubtitles.forEach((sub) => {
     output += `Dialogue: 0,${formatASSTime(sub.start)},${formatASSTime(sub.end)},Arabic,,0,0,0,,{\\an5\\pos(${safeX},${safeY})}${escapeAssText(sub.arabic)}\n`;
     output += `Dialogue: 1,${formatASSTime(sub.start)},${formatASSTime(sub.end)},Translation,,0,0,0,,{\\an5\\pos(${safeX},${safeY + translationOffset})}${escapeAssText(sub.translation)}\n`;
   });
@@ -58,7 +60,7 @@ export function generateASS(
 }
 
 export function generateJSON(subtitles: Subtitle[]): string {
-  return JSON.stringify(subtitles, null, 2);
+  return JSON.stringify(normalizeSubtitleTimings(subtitles), null, 2);
 }
 
 export function downloadFile(

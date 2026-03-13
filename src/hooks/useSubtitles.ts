@@ -11,6 +11,7 @@ import type {
   AyahTimingSegment,
 } from "@/types";
 import { buildSubtitlesFromAyahRange } from "@/lib/subtitle-generation";
+import { normalizeSubtitleTiming } from "@/lib/subtitle-timing";
 
 export function useSubtitles(onResetPlayback: () => void) {
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
@@ -72,9 +73,10 @@ export function useSubtitles(onResetPlayback: () => void) {
 
   function handleSubtitleChange(updated: Subtitle) {
     if (selectedSubIdx === null) return;
+    const normalized = normalizeSubtitleTiming(updated);
     setSubtitles((prev) =>
       prev.map((subtitle, index) =>
-        index === selectedSubIdx ? updated : subtitle
+        index === selectedSubIdx ? normalized : subtitle
       )
     );
   }

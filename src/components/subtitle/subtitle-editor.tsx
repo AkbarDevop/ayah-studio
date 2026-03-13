@@ -54,6 +54,7 @@ export default function SubtitleEditor({
           <input
             type="number"
             step={0.5}
+            min={0}
             value={subtitle.start}
             onChange={(e) =>
               handleFieldChange("start", parseFloat(e.target.value) || 0)
@@ -66,6 +67,7 @@ export default function SubtitleEditor({
           <input
             type="number"
             step={0.5}
+            min={0}
             value={subtitle.end}
             onChange={(e) =>
               handleFieldChange("end", parseFloat(e.target.value) || 0)
@@ -74,6 +76,9 @@ export default function SubtitleEditor({
           />
         </div>
       </div>
+      <p className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)]">
+        End time is kept at least 0.1s after start.
+      </p>
 
       {/* Arabic textarea */}
       <div>
