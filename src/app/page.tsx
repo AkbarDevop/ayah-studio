@@ -160,6 +160,34 @@ export default function Home() {
     );
   }
 
+  function handleSubtitleBoundaryChange(
+    idx: number,
+    edge: "start" | "end",
+    seconds: number
+  ) {
+    const subtitle = subtitlesState.subtitles[idx];
+    if (!subtitle) {
+      return;
+    }
+
+    subtitlesState.updateSubtitleAtIndex(idx, {
+      ...subtitle,
+      [edge]: seconds,
+    });
+  }
+
+  function handleSetSelectedBoundaryToPlayhead(edge: "start" | "end") {
+    if (subtitlesState.selectedSubIdx === null) {
+      return;
+    }
+
+    handleSubtitleBoundaryChange(
+      subtitlesState.selectedSubIdx,
+      edge,
+      currentTime
+    );
+  }
+
   /* ------------------------------------------------------------------ */
   /* Playback simulation                                                 */
   /* ------------------------------------------------------------------ */
@@ -1123,6 +1151,7 @@ export default function Home() {
                 setCurrentTime(subtitlesState.subtitles[idx].start);
               }}
               onSeek={setCurrentTime}
+              onResizeSubtitle={handleSubtitleBoundaryChange}
             />
           </div>
 
@@ -1132,8 +1161,15 @@ export default function Home() {
             subtitlesState.subtitles[subtitlesState.selectedSubIdx] ? (
               <SubtitleEditor
                 subtitle={subtitlesState.subtitles[subtitlesState.selectedSubIdx]}
+                currentTime={currentTime}
                 onChange={subtitlesState.handleSubtitleChange}
                 onDelete={subtitlesState.handleSubtitleDelete}
+                onSetStartToPlayhead={() =>
+                  handleSetSelectedBoundaryToPlayhead("start")
+                }
+                onSetEndToPlayhead={() =>
+                  handleSetSelectedBoundaryToPlayhead("end")
+                }
               />
             ) : (
               <div className="flex h-full items-center justify-center">

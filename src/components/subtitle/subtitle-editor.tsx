@@ -5,8 +5,11 @@ import type { Subtitle } from "@/types";
 
 interface SubtitleEditorProps {
   subtitle: Subtitle;
+  currentTime: number;
   onChange: (updated: Subtitle) => void;
   onDelete: () => void;
+  onSetStartToPlayhead: () => void;
+  onSetEndToPlayhead: () => void;
 }
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -19,8 +22,11 @@ function Label({ children }: { children: React.ReactNode }) {
 
 export default function SubtitleEditor({
   subtitle,
+  currentTime,
   onChange,
   onDelete,
+  onSetStartToPlayhead,
+  onSetEndToPlayhead,
 }: SubtitleEditorProps) {
   function handleFieldChange(
     field: keyof Subtitle,
@@ -64,6 +70,13 @@ export default function SubtitleEditor({
             }
             className="font-mono-ui w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
           />
+          <button
+            type="button"
+            onClick={onSetStartToPlayhead}
+            className="font-mono-ui mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+          >
+            Set to Playhead ({currentTime.toFixed(2)}s)
+          </button>
         </div>
         <div>
           <Label>End (s)</Label>
@@ -77,6 +90,13 @@ export default function SubtitleEditor({
             }
             className="font-mono-ui w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
           />
+          <button
+            type="button"
+            onClick={onSetEndToPlayhead}
+            className="font-mono-ui mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+          >
+            Set to Playhead ({currentTime.toFixed(2)}s)
+          </button>
         </div>
       </div>
       <p className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)]">

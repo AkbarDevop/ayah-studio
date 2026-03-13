@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type MouseEvent,
+} from "react";
 import type { Subtitle } from "@/types";
 
 interface TimelineTrackProps {
@@ -10,6 +16,11 @@ interface TimelineTrackProps {
   selectedIdx: number | null;
   onSelect: (idx: number) => void;
   onSeek: (seconds: number) => void;
+  onResizeSubtitle: (
+    idx: number,
+    edge: "start" | "end",
+    seconds: number
+  ) => void;
 }
 
 export default function TimelineTrack({
@@ -19,7 +30,14 @@ export default function TimelineTrack({
   selectedIdx,
   onSelect,
   onSeek,
+  onResizeSubtitle,
 }: TimelineTrackProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const resizeStateRef = useRef<{
+    idx: number;
+    edge: "start" | "end";
+  } | null>(null);
+
   const timeMarkers = useMemo(() => {
     if (totalDuration <= 0) return [];
     const markers: number[] = [];
@@ -46,8 +64,55 @@ export default function TimelineTrack({
     onSeek(Math.min(totalDuration, Math.max(0, relativeX * totalDuration)));
   }
 
+  const getTimeFromClientX = useCallback(
+    (clientX: number) => {
+      const track = trackRef.current;
+      if (!track || totalDuration <= 0) {
+        return 0;
+      }
+
+      const bounds = track.getBoundingClientRect();
+      const relativeX = (clientX - bounds.left) / bounds.width;
+      return Math.min(totalDuration, Math.max(0, relativeX * totalDuration));
+    },
+    [totalDuration]
+  );
+
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState) {
+        return;
+      }
+
+      event.preventDefault();
+      onResizeSubtitle(
+        resizeState.idx,
+        resizeState.edge,
+        getTimeFromClientX(event.clientX)
+      );
+    }
+
+    function stopResizing() {
+      resizeStateRef.current = null;
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, {
+      passive: false,
+    });
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+    };
+  }, [getTimeFromClientX, onResizeSubtitle]);
+
   return (
     <div
+      ref={trackRef}
       className="relative h-[60px] w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-alt)]"
       onClick={handleSeek}
     >
@@ -104,6 +169,28 @@ export default function TimelineTrack({
               width: `${Math.max(widthPercent, 0.5)}%`,
             }}
           >
+            {isSelected && (
+              <>
+                <span
+                  role="presentation"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    resizeStateRef.current = { idx, edge: "start" };
+                  }}
+                  className="absolute inset-y-0 left-0 w-2 cursor-ew-resize rounded-l-sm bg-black/15 hover:bg-black/25"
+                />
+                <span
+                  role="presentation"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    resizeStateRef.current = { idx, edge: "end" };
+                  }}
+                  className="absolute inset-y-0 right-0 w-2 cursor-ew-resize rounded-r-sm bg-black/15 hover:bg-black/25"
+                />
+              </>
+            )}
             <span className="truncate text-[10px] font-bold">
               {sub.ayahNum}
             </span>

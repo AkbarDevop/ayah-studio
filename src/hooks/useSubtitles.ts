@@ -80,18 +80,22 @@ export function useSubtitles(onResetPlayback: () => void) {
 
   function handleSubtitleChange(updated: Subtitle) {
     if (selectedSubIdx === null) return;
-    const normalized = normalizeSubtitleTiming(updated);
-    setSubtitles((prev) =>
-      prev.map((subtitle, index) =>
-        index === selectedSubIdx ? normalized : subtitle
-      )
-    );
+    updateSubtitleAtIndex(selectedSubIdx, updated);
   }
 
   function handleSubtitleDelete() {
     if (selectedSubIdx === null) return;
     setSubtitles((prev) => prev.filter((_, index) => index !== selectedSubIdx));
     setSelectedSubIdx(null);
+  }
+
+  function updateSubtitleAtIndex(index: number, updated: Subtitle) {
+    const normalized = normalizeSubtitleTiming(updated);
+    setSubtitles((prev) =>
+      prev.map((subtitle, subtitleIndex) =>
+        subtitleIndex === index ? normalized : subtitle
+      )
+    );
   }
 
   function updateSubtitleFormatting(
@@ -127,6 +131,7 @@ export function useSubtitles(onResetPlayback: () => void) {
     previewSubtitle,
     generateSubtitles,
     applyDetectedSubtitles,
+    updateSubtitleAtIndex,
     handleSubtitleChange,
     handleSubtitleDelete,
   };
