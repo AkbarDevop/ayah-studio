@@ -23,6 +23,7 @@ import type {
 import { MAX_AYAH_DETECT_UPLOAD_MB } from "@/lib/ayah-detection-config";
 import {
   ARABIC_FONT_OPTIONS,
+  resolveSubtitleColors,
   TRANSLATION_FONT_OPTIONS,
 } from "@/lib/subtitle-formatting";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
@@ -148,6 +149,10 @@ export default function Home() {
         ? subtitlesState.subtitleDuration
         : 60;
   const previewSubtitle = subtitlesState.previewSubtitle;
+  const resolvedSubtitleColors = resolveSubtitleColors(
+    subtitlesState.subtitleStyle,
+    subtitlesState.subtitleFormatting
+  );
 
   /* ------------------------------------------------------------------ */
   /* Subtitle generation                                                 */
@@ -623,6 +628,95 @@ export default function Home() {
                         }
                         className="w-full accent-[var(--gold)]"
                       />
+                    </label>
+
+                    <label className="mt-4 block">
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Arabic Color
+                        </span>
+                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                          {resolvedSubtitleColors.arabicColor}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={resolvedSubtitleColors.arabicColor}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              arabicColorOverride: event.target.value,
+                            })
+                          }
+                          className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--surface-alt)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            subtitlesState.updateSubtitleFormatting({
+                              arabicColorOverride: null,
+                            })
+                          }
+                          className="font-mono-ui rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+                        >
+                          Use Style Color
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="mt-4 block">
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Translation Color
+                        </span>
+                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                          {resolvedSubtitleColors.translationColor}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={resolvedSubtitleColors.translationColor}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              translationColorOverride: event.target.value,
+                            })
+                          }
+                          className="h-10 w-14 cursor-pointer rounded border border-[var(--border)] bg-[var(--surface-alt)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            subtitlesState.updateSubtitleFormatting({
+                              translationColorOverride: null,
+                            })
+                          }
+                          className="font-mono-ui rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+                        >
+                          Use Style Color
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="mt-4 flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={subtitlesState.subtitleFormatting.translationItalic}
+                        onChange={(event) =>
+                          subtitlesState.updateSubtitleFormatting({
+                            translationItalic: event.target.checked,
+                          })
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--surface-alt)] accent-[var(--gold)]"
+                      />
+                      <span>
+                        <span className="block text-sm text-[var(--text)]">
+                          Italicize translation text
+                        </span>
+                        <span className="mt-1 block text-xs leading-relaxed text-[var(--text-dim)]">
+                          Applies to the preview and styled `.ASS` export.
+                        </span>
+                      </span>
                     </label>
 
                     <label className="mt-4 block">

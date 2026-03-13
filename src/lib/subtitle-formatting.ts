@@ -3,13 +3,17 @@ import type {
   SubtitleFormatting,
   TranslationFontFamily,
 } from "@/types";
+import { SUBTITLE_STYLES } from "./constants";
 
 export const DEFAULT_SUBTITLE_FORMATTING: SubtitleFormatting = {
   arabicFontFamily: "amiri",
   translationFontFamily: "ui",
   arabicFontSize: 28,
   translationFontSize: 16,
+  arabicColorOverride: null,
+  translationColorOverride: null,
   backgroundOpacity: 100,
+  translationItalic: true,
   splitLongAyahs: true,
   maxWordsPerChunk: 12,
 };
@@ -48,6 +52,21 @@ export function getArabicFontAssName(fontFamily: ArabicFontFamily) {
 
 export function getTranslationFontAssName(fontFamily: TranslationFontFamily) {
   return fontFamily === "mono" ? "IBM Plex Mono" : "Manrope";
+}
+
+export function resolveSubtitleColors(
+  styleId: string,
+  formatting: SubtitleFormatting
+) {
+  const style =
+    SUBTITLE_STYLES.find((candidate) => candidate.id === styleId) ??
+    SUBTITLE_STYLES[0];
+
+  return {
+    arabicColor: formatting.arabicColorOverride ?? style.arabicColor,
+    translationColor:
+      formatting.translationColorOverride ?? style.transColor,
+  };
 }
 
 export function applyOpacityToColor(color: string, opacityPercent: number) {

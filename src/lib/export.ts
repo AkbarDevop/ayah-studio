@@ -9,6 +9,7 @@ import {
   DEFAULT_SUBTITLE_FORMATTING,
   getArabicFontAssName,
   getTranslationFontAssName,
+  resolveSubtitleColors,
 } from "./subtitle-formatting";
 import { normalizeSubtitleTimings } from "./subtitle-timing";
 
@@ -47,25 +48,26 @@ export function generateASS(
   const safeSubtitles = normalizeSubtitleTimings(subtitles);
   const st =
     SUBTITLE_STYLES.find((s) => s.id === styleId) || SUBTITLE_STYLES[0];
+  const colors = resolveSubtitleColors(styleId, formatting);
   const { width: playResX, height: playResY } = getAssResolution(aspectRatio);
   const safeX = Math.round(clamp(placement.x, 0.12, 0.88) * playResX);
   const safeY = Math.round(clamp(placement.y, 0.12, 0.88) * playResY);
   const translationOffset = Math.round(playResY * 0.055);
 
   let output = `[Script Info]\nTitle: Quran Subtitles — Ayah Studio\nScriptType: v4.00+\nPlayResX: ${playResX}\nPlayResY: ${playResY}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n`;
-  output += `[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Alignment, MarginL, MarginR, MarginV, Encoding\n`;
-  output += `Style: Arabic,${getArabicFontAssName(formatting.arabicFontFamily)},${Math.round(formatting.arabicFontSize * 1.5)},${rgbToAssBgr(st.arabicColor)},${cssColorToAssBackColour(
+  output += `[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Italic, Alignment, MarginL, MarginR, MarginV, Encoding\n`;
+  output += `Style: Arabic,${getArabicFontAssName(formatting.arabicFontFamily)},${Math.round(formatting.arabicFontSize * 1.5)},${rgbToAssBgr(colors.arabicColor)},${cssColorToAssBackColour(
     st.bg,
     formatting.backgroundOpacity
-  )},0,5,30,30,30,1\n`;
+  )},0,0,5,30,30,30,1\n`;
   output += `Style: Translation,${getTranslationFontAssName(
     formatting.translationFontFamily
   )},${Math.round(formatting.translationFontSize * 1.5)},${rgbToAssBgr(
-    st.transColor
+    colors.translationColor
   )},${cssColorToAssBackColour(
     st.bg,
     formatting.backgroundOpacity
-  )},0,5,30,30,30,1\n\n`;
+  )},0,${formatting.translationItalic ? -1 : 0},5,30,30,30,1\n\n`;
   output += `[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
 
   safeSubtitles.forEach((sub) => {

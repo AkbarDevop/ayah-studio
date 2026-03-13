@@ -69,7 +69,10 @@ export interface SubtitleFormatting {
   translationFontFamily: TranslationFontFamily;
   arabicFontSize: number;
   translationFontSize: number;
+  arabicColorOverride: string | null;
+  translationColorOverride: string | null;
   backgroundOpacity: number;
+  translationItalic: boolean;
   splitLongAyahs: boolean;
   maxWordsPerChunk: number;
 }

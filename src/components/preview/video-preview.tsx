@@ -13,6 +13,7 @@ import {
   applyOpacityToColor,
   getArabicFontCss,
   getTranslationFontCss,
+  resolveSubtitleColors,
 } from "@/lib/subtitle-formatting";
 
 interface VideoPreviewProps {
@@ -127,6 +128,10 @@ export default function VideoPreview({
     ) ?? null;
   }, [subtitles, currentTime]);
   const visibleSubtitle = currentSubtitle ?? (!playing ? previewSubtitle : null);
+  const subtitleColors = useMemo(
+    () => resolveSubtitleColors(subtitleStyleId, subtitleFormatting),
+    [subtitleFormatting, subtitleStyleId]
+  );
   const overlayBackground = useMemo(() => {
     switch (subtitleStyleId) {
       case "modern":
@@ -433,6 +438,7 @@ export default function VideoPreview({
               dir="rtl"
               className="subtitle-theme-arabic mb-1.5 leading-relaxed"
               style={{
+                color: subtitleColors.arabicColor,
                 fontFamily: getArabicFontCss(subtitleFormatting.arabicFontFamily),
                 fontSize: `${subtitleFormatting.arabicFontSize}px`,
               }}
@@ -442,10 +448,14 @@ export default function VideoPreview({
             <p
               className="subtitle-theme-translation leading-relaxed"
               style={{
+                color: subtitleColors.translationColor,
                 fontFamily: getTranslationFontCss(
                   subtitleFormatting.translationFontFamily
                 ),
                 fontSize: `${subtitleFormatting.translationFontSize}px`,
+                fontStyle: subtitleFormatting.translationItalic
+                  ? "italic"
+                  : "normal",
               }}
             >
               {visibleSubtitle.translation}
