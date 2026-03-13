@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import {
+  MAX_AYAH_DETECT_UPLOAD_BYTES,
+  getAyahDetectUploadLimitMessage,
+} from "@/lib/ayah-detection-config";
 import type { AyahDetectionResult } from "@/types";
 
 export function useDetectionState() {
@@ -15,6 +19,13 @@ export function useDetectionState() {
   async function detectAyahs(sourceFile: File | null) {
     if (!sourceFile) {
       setDetectionError("Upload a clip or override audio before detecting ayahs.");
+      return null;
+    }
+
+    if (sourceFile.size > MAX_AYAH_DETECT_UPLOAD_BYTES) {
+      setDetectionResult(null);
+      setAppliedDetectionKey(null);
+      setDetectionError(getAyahDetectUploadLimitMessage());
       return null;
     }
 

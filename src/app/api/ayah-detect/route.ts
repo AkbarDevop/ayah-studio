@@ -8,6 +8,11 @@ import {
   detectAyahRangesFromTranscript,
   getAyahRangeMetadata,
 } from "@/lib/ayah-detection";
+import {
+  MAX_AYAH_DETECT_MULTIPART_OVERHEAD_BYTES,
+  MAX_AYAH_DETECT_UPLOAD_BYTES,
+  getAyahDetectUploadLimitMessage,
+} from "@/lib/ayah-detection-config";
 import type { AyahDetectionMatch, AyahTimingSegment } from "@/types";
 
 export const runtime = "nodejs";
@@ -21,15 +26,14 @@ const SILENCE_FILTER = "silencedetect=noise=-18dB:d=0.08";
 const SILENCE_EDGE_PADDING_SECONDS = 0.35;
 
 export async function POST(request: Request) {
-  const token = await resolveHuggingFaceToken();
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+  const maxRequestBytes =
+    MAX_AYAH_DETECT_UPLOAD_BYTES + MAX_AYAH_DETECT_MULTIPART_OVERHEAD_BYTES;
 
-  if (!token) {
+  if (Number.isFinite(contentLength) && contentLength > maxRequestBytes) {
     return NextResponse.json(
-      {
-        error:
-          "Ayah detection needs a Hugging Face token. Set HF_TOKEN/HUGGINGFACE_API_KEY or run `hf auth login`, then restart Ayah Studio.",
-      },
-      { status: 503 }
+      { error: getAyahDetectUploadLimitMessage() },
+      { status: 413 }
     );
   }
 
@@ -40,6 +44,25 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Upload a clip or audio file before running ayah detection." },
       { status: 400 }
+    );
+  }
+
+  if (media.size > MAX_AYAH_DETECT_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: getAyahDetectUploadLimitMessage() },
+      { status: 413 }
+    );
+  }
+
+  const token = await resolveHuggingFaceToken();
+
+  if (!token) {
+    return NextResponse.json(
+      {
+        error:
+          "Ayah detection needs a Hugging Face token. Set HF_TOKEN/HUGGINGFACE_API_KEY or run `hf auth login`, then restart Ayah Studio.",
+      },
+      { status: 503 }
     );
   }
 

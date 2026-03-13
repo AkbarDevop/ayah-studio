@@ -20,6 +20,7 @@ import type {
   AspectRatioPreset,
   PlaybackMode,
 } from "@/types";
+import { MAX_AYAH_DETECT_UPLOAD_MB } from "@/lib/ayah-detection-config";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
 import { fetchAllSurahs } from "@/lib/quran-api";
 import { useQuranData } from "@/hooks/useQuranData";
@@ -747,6 +748,10 @@ export default function Home() {
                     Applying a detected range now auto-generates subtitles across the
                     current clip duration instead of using the fixed seconds-per-ayah
                     guess.
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
+                    Detection upload limit: {MAX_AYAH_DETECT_UPLOAD_MB} MB per
+                    request.
                   </p>
                 </div>
 
