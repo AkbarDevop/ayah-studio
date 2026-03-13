@@ -21,6 +21,10 @@ import type {
   PlaybackMode,
 } from "@/types";
 import { MAX_AYAH_DETECT_UPLOAD_MB } from "@/lib/ayah-detection-config";
+import {
+  ARABIC_FONT_OPTIONS,
+  TRANSLATION_FONT_OPTIONS,
+} from "@/lib/subtitle-formatting";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
 import { fetchAllSurahs } from "@/lib/quran-api";
 import { useQuranData } from "@/hooks/useQuranData";
@@ -415,10 +419,13 @@ export default function Home() {
                             ? "border-[var(--gold-dim)] bg-[var(--surface-alt)]"
                             : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
                         ].join(" ")}
-                      >
+                        >
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-[var(--gold)] font-[family-name:var(--font-ibm-plex)]">
                             Ayah {sub.ayahNum}
+                            {sub.chunkCount && sub.chunkCount > 1
+                              ? ` · ${sub.chunkIndex ?? 1}/${sub.chunkCount}`
+                              : ""}
                           </span>
                           <span className="text-[10px] text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
                             {sub.start.toFixed(1)}s &ndash;{" "}
@@ -491,6 +498,181 @@ export default function Home() {
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="mt-6">
+                  <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                    Formatting
+                  </p>
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="block">
+                        <span className="font-mono-ui mb-1 block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Arabic Font
+                        </span>
+                        <select
+                          value={subtitlesState.subtitleFormatting.arabicFontFamily}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              arabicFontFamily: event.target.value as "amiri" | "naskh",
+                            })
+                          }
+                          className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+                        >
+                          {ARABIC_FONT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="block">
+                        <span className="font-mono-ui mb-1 block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Translation Font
+                        </span>
+                        <select
+                          value={subtitlesState.subtitleFormatting.translationFontFamily}
+                          onChange={(event) =>
+                            subtitlesState.updateSubtitleFormatting({
+                              translationFontFamily: event.target.value as "ui" | "mono",
+                            })
+                          }
+                          className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+                        >
+                          {TRANSLATION_FONT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="mt-4 block">
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Arabic Size
+                        </span>
+                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                          {subtitlesState.subtitleFormatting.arabicFontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={20}
+                        max={44}
+                        step={1}
+                        value={subtitlesState.subtitleFormatting.arabicFontSize}
+                        onChange={(event) =>
+                          subtitlesState.updateSubtitleFormatting({
+                            arabicFontSize: Number.parseInt(event.target.value, 10),
+                          })
+                        }
+                        className="w-full accent-[var(--gold)]"
+                      />
+                    </label>
+
+                    <label className="mt-4 block">
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Translation Size
+                        </span>
+                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                          {subtitlesState.subtitleFormatting.translationFontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={12}
+                        max={28}
+                        step={1}
+                        value={subtitlesState.subtitleFormatting.translationFontSize}
+                        onChange={(event) =>
+                          subtitlesState.updateSubtitleFormatting({
+                            translationFontSize: Number.parseInt(event.target.value, 10),
+                          })
+                        }
+                        className="w-full accent-[var(--gold)]"
+                      />
+                    </label>
+
+                    <label className="mt-4 block">
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Background Opacity
+                        </span>
+                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                          {subtitlesState.subtitleFormatting.backgroundOpacity}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={subtitlesState.subtitleFormatting.backgroundOpacity}
+                        onChange={(event) =>
+                          subtitlesState.updateSubtitleFormatting({
+                            backgroundOpacity: Number.parseInt(event.target.value, 10),
+                          })
+                        }
+                        className="w-full accent-[var(--gold)]"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
+                    Long Ayah Handling
+                  </p>
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <label className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={subtitlesState.subtitleFormatting.splitLongAyahs}
+                        onChange={(event) =>
+                          subtitlesState.updateSubtitleFormatting({
+                            splitLongAyahs: event.target.checked,
+                          })
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--surface-alt)] accent-[var(--gold)]"
+                      />
+                      <span>
+                        <span className="block text-sm text-[var(--text)]">
+                          Split long ayahs into multiple timed subtitle chunks
+                        </span>
+                        <span className="mt-1 block text-xs leading-relaxed text-[var(--text-dim)]">
+                          Applies to new subtitle generation and detected ayah ranges.
+                        </span>
+                      </span>
+                    </label>
+
+                    <label className="mt-4 block">
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className="font-mono-ui block text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                          Max Arabic Words Per Chunk
+                        </span>
+                        <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
+                          {subtitlesState.subtitleFormatting.maxWordsPerChunk}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={6}
+                        max={22}
+                        step={1}
+                        value={subtitlesState.subtitleFormatting.maxWordsPerChunk}
+                        onChange={(event) =>
+                          subtitlesState.updateSubtitleFormatting({
+                            maxWordsPerChunk: Number.parseInt(event.target.value, 10),
+                          })
+                        }
+                        className="w-full accent-[var(--gold)]"
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 {/* Reciter Reference */}
@@ -895,6 +1077,7 @@ export default function Home() {
               subtitles={subtitlesState.subtitles}
               currentTime={currentTime}
               subtitleStyleId={subtitlesState.subtitleStyle}
+              subtitleFormatting={subtitlesState.subtitleFormatting}
               subtitlePlacement={subtitlesState.subtitlePlacement}
               playbackMode={playbackMode}
               aspectRatio={subtitlesState.aspectRatio}
@@ -972,6 +1155,7 @@ export default function Home() {
         <ExportPanel
           subtitles={subtitlesState.subtitles}
           subtitleStyleId={subtitlesState.subtitleStyle}
+          subtitleFormatting={subtitlesState.subtitleFormatting}
           subtitlePlacement={subtitlesState.subtitlePlacement}
           aspectRatio={subtitlesState.aspectRatio}
           onClose={() => subtitlesState.setShowExport(false)}
@@ -987,6 +1171,8 @@ function getDetectionKey(match: AyahDetectionMatch): string {
 
 function getTimingSourceLabel(source: NonNullable<AyahDetectionMatch["timingSource"]>) {
   switch (source) {
+    case "chunks":
+      return "Aligned from transcript chunk timestamps";
     case "silence":
       return "Audio-aligned from detected pauses";
     case "hybrid":

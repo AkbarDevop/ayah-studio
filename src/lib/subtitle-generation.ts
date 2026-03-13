@@ -2,8 +2,10 @@ import type {
   Ayah,
   AyahTimingSegment,
   Subtitle,
+  SubtitleFormatting,
   TranslationAyah,
 } from "@/types";
+import { DEFAULT_SUBTITLE_FORMATTING } from "./subtitle-formatting";
 
 export function buildSubtitlesFromAyahRange(
   ayahRange: Ayah[],
@@ -12,31 +14,38 @@ export function buildSubtitlesFromAyahRange(
     detectedTimings?: AyahTimingSegment[];
     clipDuration?: number;
     fallbackDuration: number;
+    formatting?: SubtitleFormatting;
   }
 ): Subtitle[] {
   if (ayahRange.length === 0) {
     return [];
   }
 
+  const formatting = options.formatting ?? DEFAULT_SUBTITLE_FORMATTING;
+  const translationsByAyah = new Map(
+    translations.map((translation) => [translation.numberInSurah, translation])
+  );
+
   if (options.detectedTimings?.length === ayahRange.length) {
     const timingByAyah = new Map(
       options.detectedTimings.map((timing) => [timing.ayahNum, timing])
     );
 
-    return ayahRange.map((ayah, index) => {
-      const translation = translations.find(
-        (item) => item.numberInSurah === ayah.numberInSurah
-      );
-      const timing = timingByAyah.get(ayah.numberInSurah);
+    return expandSubtitlesForFormatting(
+      ayahRange.map((ayah, index) => {
+        const translation = translationsByAyah.get(ayah.numberInSurah);
+        const timing = timingByAyah.get(ayah.numberInSurah);
 
-      return {
-        ayahNum: ayah.numberInSurah,
-        arabic: ayah.text,
-        translation: translation?.text ?? "",
-        start: timing?.start ?? 0,
-        end: timing?.end ?? options.fallbackDuration * (index + 1),
-      };
-    });
+        return {
+          ayahNum: ayah.numberInSurah,
+          arabic: ayah.text,
+          translation: translation?.text ?? "",
+          start: timing?.start ?? 0,
+          end: timing?.end ?? options.fallbackDuration * (index + 1),
+        };
+      }),
+      formatting
+    );
   }
 
   const clipDuration = options.clipDuration ?? 0;
@@ -48,47 +57,190 @@ export function buildSubtitlesFromAyahRange(
     const totalWeight = weights.reduce((sum, value) => sum + value, 0);
     let consumedWeight = 0;
 
-    return ayahRange.map((ayah, index) => {
-      const translation = translations.find(
-        (item) => item.numberInSurah === ayah.numberInSurah
-      );
-      const start = (consumedWeight / totalWeight) * clipDuration;
-      consumedWeight += weights[index];
-      const end =
-        index === ayahRange.length - 1
-          ? clipDuration
-          : (consumedWeight / totalWeight) * clipDuration;
+    return expandSubtitlesForFormatting(
+      ayahRange.map((ayah, index) => {
+        const translation = translationsByAyah.get(ayah.numberInSurah);
+        const start = (consumedWeight / totalWeight) * clipDuration;
+        consumedWeight += weights[index];
+        const end =
+          index === ayahRange.length - 1
+            ? clipDuration
+            : (consumedWeight / totalWeight) * clipDuration;
 
-      return {
-        ayahNum: ayah.numberInSurah,
-        arabic: ayah.text,
-        translation: translation?.text ?? "",
-        start,
-        end,
-      };
-    });
+        return {
+          ayahNum: ayah.numberInSurah,
+          arabic: ayah.text,
+          translation: translation?.text ?? "",
+          start,
+          end,
+        };
+      }),
+      formatting
+    );
   }
 
   let offset = 0;
   const gap = 0.5;
 
-  return ayahRange.map((ayah) => {
-    const translation = translations.find(
-      (item) => item.numberInSurah === ayah.numberInSurah
-    );
-    const subtitle: Subtitle = {
-      ayahNum: ayah.numberInSurah,
-      arabic: ayah.text,
-      translation: translation?.text ?? "",
-      start: offset,
-      end: offset + options.fallbackDuration,
+  return expandSubtitlesForFormatting(
+    ayahRange.map((ayah) => {
+      const translation = translationsByAyah.get(ayah.numberInSurah);
+      const subtitle: Subtitle = {
+        ayahNum: ayah.numberInSurah,
+        arabic: ayah.text,
+        translation: translation?.text ?? "",
+        start: offset,
+        end: offset + options.fallbackDuration,
+      };
+
+      offset += options.fallbackDuration + gap;
+      return subtitle;
+    }),
+    formatting
+  );
+}
+
+function expandSubtitlesForFormatting(
+  subtitles: Subtitle[],
+  formatting: SubtitleFormatting
+) {
+  return subtitles.flatMap((subtitle) =>
+    splitSubtitleIntoChunks(subtitle, formatting)
+  );
+}
+
+function splitSubtitleIntoChunks(
+  subtitle: Subtitle,
+  formatting: SubtitleFormatting
+) {
+  if (!formatting.splitLongAyahs) {
+    return [{ ...subtitle, chunkIndex: 1, chunkCount: 1 }];
+  }
+
+  const arabicWords = tokenizeWords(subtitle.arabic);
+  const maxWordsPerChunk = Math.max(4, Math.floor(formatting.maxWordsPerChunk));
+
+  if (arabicWords.length <= maxWordsPerChunk) {
+    return [{ ...subtitle, chunkIndex: 1, chunkCount: 1 }];
+  }
+
+  const arabicChunks = splitWordsIntoChunks(arabicWords, maxWordsPerChunk);
+  const chunkWordCounts = arabicChunks.map((chunk) => chunk.length);
+  const translationChunks = splitTranslationIntoAlignedChunks(
+    subtitle.translation,
+    chunkWordCounts
+  );
+  const totalWords = chunkWordCounts.reduce((sum, count) => sum + count, 0);
+  const totalDuration = Math.max(subtitle.end - subtitle.start, 0.1);
+
+  let start = subtitle.start;
+
+  return arabicChunks.map((chunkWords, index) => {
+    const durationRatio = chunkWordCounts[index] / totalWords;
+    const end =
+      index === arabicChunks.length - 1
+        ? subtitle.end
+        : start + totalDuration * durationRatio;
+    const nextSubtitle: Subtitle = {
+      ayahNum: subtitle.ayahNum,
+      arabic: chunkWords.join(" "),
+      translation: translationChunks[index] ?? "",
+      start,
+      end,
+      chunkIndex: index + 1,
+      chunkCount: arabicChunks.length,
     };
 
-    offset += options.fallbackDuration + gap;
-    return subtitle;
+    start = end;
+    return nextSubtitle;
   });
 }
 
+function splitWordsIntoChunks(words: string[], maxWordsPerChunk: number) {
+  const chunks: string[][] = [];
+  let start = 0;
+  const minimumPreferredBreak = Math.max(1, Math.floor(maxWordsPerChunk * 0.6));
+
+  while (start < words.length) {
+    let end = Math.min(start + maxWordsPerChunk, words.length);
+
+    if (end < words.length) {
+      const preferredBreak = findPreferredBreakIndex(
+        words,
+        start,
+        end,
+        minimumPreferredBreak
+      );
+      if (preferredBreak > start) {
+        end = preferredBreak;
+      }
+    }
+
+    chunks.push(words.slice(start, end));
+    start = end;
+  }
+
+  return chunks;
+}
+
+function findPreferredBreakIndex(
+  words: string[],
+  start: number,
+  end: number,
+  minimumPreferredBreak: number
+) {
+  for (let index = end; index > start + minimumPreferredBreak; index -= 1) {
+    if (/[،؛.!?؟:]$/.test(words[index - 1])) {
+      return index;
+    }
+  }
+
+  return end;
+}
+
+function splitTranslationIntoAlignedChunks(
+  translation: string,
+  chunkWordCounts: number[]
+) {
+  const words = tokenizeWords(translation);
+  if (words.length === 0) {
+    return chunkWordCounts.map(() => "");
+  }
+
+  const totalWeight = chunkWordCounts.reduce((sum, count) => sum + count, 0);
+  const remainingChunkWeights = [...chunkWordCounts];
+  const chunks: string[] = [];
+  let start = 0;
+  let remainingWords = words.length;
+
+  for (let index = 0; index < chunkWordCounts.length; index += 1) {
+    const weight = remainingChunkWeights[index];
+    const remainingChunkCount = chunkWordCounts.length - index - 1;
+
+    if (index === chunkWordCounts.length - 1) {
+      chunks.push(words.slice(start).join(" "));
+      break;
+    }
+
+    const targetWords = Math.max(
+      1,
+      Math.round((weight / totalWeight) * words.length)
+    );
+    const maxSliceLength = remainingWords - remainingChunkCount;
+    const sliceLength = Math.max(1, Math.min(targetWords, maxSliceLength));
+    const end = start + sliceLength;
+    chunks.push(words.slice(start, end).join(" "));
+    start = end;
+    remainingWords = words.length - start;
+  }
+
+  return chunks;
+}
+
 function countTimingUnits(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
+  return tokenizeWords(text).length;
+}
+
+function tokenizeWords(text: string) {
+  return text.trim().split(/\s+/).filter(Boolean);
 }

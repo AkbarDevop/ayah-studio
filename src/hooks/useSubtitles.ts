@@ -5,12 +5,14 @@ import type {
   AspectRatioPreset,
   Ayah,
   Subtitle,
+  SubtitleFormatting,
   SubtitlePlacement,
   TranslationAyah,
   SidebarTab,
   AyahTimingSegment,
 } from "@/types";
 import { buildSubtitlesFromAyahRange } from "@/lib/subtitle-generation";
+import { DEFAULT_SUBTITLE_FORMATTING } from "@/lib/subtitle-formatting";
 import { normalizeSubtitleTiming } from "@/lib/subtitle-timing";
 
 export function useSubtitles(onResetPlayback: () => void) {
@@ -24,6 +26,9 @@ export function useSubtitles(onResetPlayback: () => void) {
     useState<AspectRatioPreset>("landscape");
   const [subtitlePlacement, setSubtitlePlacement] =
     useState<SubtitlePlacement>({ x: 0.5, y: 0.78 });
+  const [subtitleFormatting, setSubtitleFormatting] = useState<SubtitleFormatting>(
+    DEFAULT_SUBTITLE_FORMATTING
+  );
 
   const subtitleDuration =
     subtitles.length > 0 ? Math.max(...subtitles.map((s) => s.end)) + 2 : 0;
@@ -41,6 +46,7 @@ export function useSubtitles(onResetPlayback: () => void) {
       translations,
       {
         fallbackDuration: defaultDuration,
+        formatting: subtitleFormatting,
       }
     );
 
@@ -59,6 +65,7 @@ export function useSubtitles(onResetPlayback: () => void) {
       detectedTimings: options.detectedTimings,
       clipDuration: options.clipDuration,
       fallbackDuration: defaultDuration,
+      formatting: subtitleFormatting,
     });
 
     applyGeneratedSubtitles(nextSubtitles);
@@ -87,6 +94,15 @@ export function useSubtitles(onResetPlayback: () => void) {
     setSelectedSubIdx(null);
   }
 
+  function updateSubtitleFormatting(
+    patch: Partial<SubtitleFormatting>
+  ) {
+    setSubtitleFormatting((current) => ({
+      ...current,
+      ...patch,
+    }));
+  }
+
   return {
     subtitles,
     setSubtitles,
@@ -104,6 +120,9 @@ export function useSubtitles(onResetPlayback: () => void) {
     setAspectRatio,
     subtitlePlacement,
     setSubtitlePlacement,
+    subtitleFormatting,
+    setSubtitleFormatting,
+    updateSubtitleFormatting,
     subtitleDuration,
     previewSubtitle,
     generateSubtitles,

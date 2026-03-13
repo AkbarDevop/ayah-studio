@@ -34,6 +34,8 @@ export interface Subtitle {
   translation: string;
   start: number;
   end: number;
+  chunkIndex?: number;
+  chunkCount?: number;
 }
 
 export interface SubtitleStyle {
@@ -59,6 +61,19 @@ export interface SubtitlePlacement {
   y: number;
 }
 
+export type ArabicFontFamily = "amiri" | "naskh";
+export type TranslationFontFamily = "ui" | "mono";
+
+export interface SubtitleFormatting {
+  arabicFontFamily: ArabicFontFamily;
+  translationFontFamily: TranslationFontFamily;
+  arabicFontSize: number;
+  translationFontSize: number;
+  backgroundOpacity: number;
+  splitLongAyahs: boolean;
+  maxWordsPerChunk: number;
+}
+
 export interface AyahTimingSegment {
   ayahNum: number;
   start: number;
@@ -74,7 +89,7 @@ export interface AyahDetectionMatch {
   score: number;
   matchedText: string;
   timings?: AyahTimingSegment[];
-  timingSource?: "silence" | "hybrid" | "weighted";
+  timingSource?: "chunks" | "silence" | "hybrid" | "weighted";
 }
 
 export interface AyahDetectionResult {

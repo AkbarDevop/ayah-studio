@@ -1,9 +1,15 @@
 import type {
   AspectRatioPreset,
   Subtitle,
+  SubtitleFormatting,
   SubtitlePlacement,
 } from "@/types";
 import { SUBTITLE_STYLES } from "./constants";
+import {
+  DEFAULT_SUBTITLE_FORMATTING,
+  getArabicFontAssName,
+  getTranslationFontAssName,
+} from "./subtitle-formatting";
 import { normalizeSubtitleTimings } from "./subtitle-timing";
 
 function formatSRTTime(seconds: number): string {
@@ -35,7 +41,8 @@ export function generateASS(
   subtitles: Subtitle[],
   styleId: string,
   placement: SubtitlePlacement,
-  aspectRatio: AspectRatioPreset
+  aspectRatio: AspectRatioPreset,
+  formatting: SubtitleFormatting = DEFAULT_SUBTITLE_FORMATTING
 ): string {
   const safeSubtitles = normalizeSubtitleTimings(subtitles);
   const st =
@@ -47,8 +54,18 @@ export function generateASS(
 
   let output = `[Script Info]\nTitle: Quran Subtitles — Ayah Studio\nScriptType: v4.00+\nPlayResX: ${playResX}\nPlayResY: ${playResY}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n`;
   output += `[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Alignment, MarginL, MarginR, MarginV, Encoding\n`;
-  output += `Style: Arabic,${st.font},42,${rgbToAssBgr(st.arabicColor)},&H80000000,0,5,30,30,30,1\n`;
-  output += `Style: Translation,Arial,28,${rgbToAssBgr("#E8E4DC")},&H80000000,0,5,30,30,30,1\n\n`;
+  output += `Style: Arabic,${getArabicFontAssName(formatting.arabicFontFamily)},${Math.round(formatting.arabicFontSize * 1.5)},${rgbToAssBgr(st.arabicColor)},${cssColorToAssBackColour(
+    st.bg,
+    formatting.backgroundOpacity
+  )},0,5,30,30,30,1\n`;
+  output += `Style: Translation,${getTranslationFontAssName(
+    formatting.translationFontFamily
+  )},${Math.round(formatting.translationFontSize * 1.5)},${rgbToAssBgr(
+    st.transColor
+  )},${cssColorToAssBackColour(
+    st.bg,
+    formatting.backgroundOpacity
+  )},0,5,30,30,30,1\n\n`;
   output += `[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
 
   safeSubtitles.forEach((sub) => {
@@ -110,4 +127,45 @@ function rgbToAssBgr(hex: string): string {
   const g = normalized.slice(2, 4);
   const b = normalized.slice(4, 6);
   return `&H00${b}${g}${r}`;
+}
+
+function cssColorToAssBackColour(color: string, opacityPercent: number) {
+  const normalized = color.trim().toLowerCase();
+  if (normalized === "transparent") {
+    return "&HFF000000";
+  }
+
+  const rgbaMatch = normalized.match(
+    /^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)$/
+  );
+
+  if (rgbaMatch) {
+    const [, r, g, b, alpha] = rgbaMatch;
+    const baseAlpha = alpha ? Number.parseFloat(alpha) : 1;
+    const finalAlpha = 1 - Math.max(0, Math.min(1, baseAlpha * (opacityPercent / 100)));
+    return `&H${toAssByte(finalAlpha)}${toAssByte(Number.parseFloat(b) / 255)}${toAssByte(
+      Number.parseFloat(g) / 255
+    )}${toAssByte(Number.parseFloat(r) / 255)}`;
+  }
+
+  const hexMatch = normalized.match(/^#([0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    const r = Number.parseInt(hex.slice(0, 2), 16);
+    const g = Number.parseInt(hex.slice(2, 4), 16);
+    const b = Number.parseInt(hex.slice(4, 6), 16);
+    const finalAlpha = 1 - Math.max(0, Math.min(1, opacityPercent / 100));
+    return `&H${toAssByte(finalAlpha)}${toAssByte(b / 255)}${toAssByte(
+      g / 255
+    )}${toAssByte(r / 255)}`;
+  }
+
+  return "&H80000000";
+}
+
+function toAssByte(value: number) {
+  return Math.round(Math.max(0, Math.min(1, value)) * 255)
+    .toString(16)
+    .toUpperCase()
+    .padStart(2, "0");
 }

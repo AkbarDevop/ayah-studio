@@ -148,6 +148,22 @@ export function normalizeArabicText(input: string): string {
     .trim();
 }
 
+export function scoreArabicTextSimilarity(left: string, right: string): number {
+  const normalizedLeft = normalizeArabicText(left);
+  const normalizedRight = normalizeArabicText(right);
+
+  if (!normalizedLeft || !normalizedRight) {
+    return 0;
+  }
+
+  return scoreMatch(
+    normalizedLeft,
+    normalizedRight,
+    new Set(normalizedLeft.split(" ")),
+    buildBigrams(normalizedLeft)
+  );
+}
+
 export async function getAyahRangeMetadata(
   surahNumber: number,
   startAyah: number,

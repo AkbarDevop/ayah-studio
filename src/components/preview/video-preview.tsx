@@ -6,13 +6,20 @@ import type {
   AspectRatioPreset,
   PlaybackMode,
   Subtitle,
+  SubtitleFormatting,
   SubtitlePlacement,
 } from "@/types";
+import {
+  applyOpacityToColor,
+  getArabicFontCss,
+  getTranslationFontCss,
+} from "@/lib/subtitle-formatting";
 
 interface VideoPreviewProps {
   subtitles: Subtitle[];
   currentTime: number;
   subtitleStyleId: string;
+  subtitleFormatting: SubtitleFormatting;
   subtitlePlacement: SubtitlePlacement;
   playbackMode: PlaybackMode;
   aspectRatio: AspectRatioPreset;
@@ -87,6 +94,7 @@ export default function VideoPreview({
   subtitles,
   currentTime,
   subtitleStyleId,
+  subtitleFormatting,
   subtitlePlacement,
   playbackMode,
   aspectRatio,
@@ -119,6 +127,21 @@ export default function VideoPreview({
     ) ?? null;
   }, [subtitles, currentTime]);
   const visibleSubtitle = currentSubtitle ?? (!playing ? previewSubtitle : null);
+  const overlayBackground = useMemo(() => {
+    switch (subtitleStyleId) {
+      case "modern":
+        return applyOpacityToColor("rgba(0,0,0,0.6)", subtitleFormatting.backgroundOpacity);
+      case "emerald":
+        return applyOpacityToColor("rgba(10,20,18,0.8)", subtitleFormatting.backgroundOpacity);
+      case "minimal":
+        return applyOpacityToColor("transparent", subtitleFormatting.backgroundOpacity);
+      case "cinematic":
+        return applyOpacityToColor("rgba(0,0,0,0.85)", subtitleFormatting.backgroundOpacity);
+      case "classic":
+      default:
+        return applyOpacityToColor("rgba(0,0,0,0.7)", subtitleFormatting.backgroundOpacity);
+    }
+  }, [subtitleFormatting.backgroundOpacity, subtitleStyleId]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -399,16 +422,32 @@ export default function VideoPreview({
             style={{
               left: `${subtitlePlacement.x * 100}%`,
               top: `${subtitlePlacement.y * 100}%`,
+              background: overlayBackground,
             }}
           >
             <div className="font-mono-ui mb-2 inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               <Move className="h-3 w-3" />
               Drag
             </div>
-            <p dir="rtl" className="subtitle-theme-arabic mb-1.5 text-[28px] leading-relaxed">
+            <p
+              dir="rtl"
+              className="subtitle-theme-arabic mb-1.5 leading-relaxed"
+              style={{
+                fontFamily: getArabicFontCss(subtitleFormatting.arabicFontFamily),
+                fontSize: `${subtitleFormatting.arabicFontSize}px`,
+              }}
+            >
               {visibleSubtitle.arabic}
             </p>
-            <p className="subtitle-theme-translation text-[16px] italic leading-relaxed">
+            <p
+              className="subtitle-theme-translation leading-relaxed"
+              style={{
+                fontFamily: getTranslationFontCss(
+                  subtitleFormatting.translationFontFamily
+                ),
+                fontSize: `${subtitleFormatting.translationFontSize}px`,
+              }}
+            >
               {visibleSubtitle.translation}
             </p>
           </div>

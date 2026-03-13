@@ -6,6 +6,7 @@ import type {
   AspectRatioPreset,
   ExportFormat,
   Subtitle,
+  SubtitleFormatting,
   SubtitlePlacement,
 } from "@/types";
 import {
@@ -18,6 +19,7 @@ import {
 interface ExportPanelProps {
   subtitles: Subtitle[];
   subtitleStyleId: string;
+  subtitleFormatting: SubtitleFormatting;
   subtitlePlacement: SubtitlePlacement;
   aspectRatio: AspectRatioPreset;
   onClose: () => void;
@@ -59,6 +61,7 @@ const FORMAT_OPTIONS: {
 export default function ExportPanel({
   subtitles,
   subtitleStyleId,
+  subtitleFormatting,
   subtitlePlacement,
   aspectRatio,
   onClose,
@@ -77,12 +80,20 @@ export default function ExportPanel({
           subtitles,
           subtitleStyleId,
           subtitlePlacement,
-          aspectRatio
+          aspectRatio,
+          subtitleFormatting
         );
       case "json":
         return generateJSON(subtitles);
     }
-  }, [aspectRatio, format, subtitlePlacement, subtitles, subtitleStyleId]);
+  }, [
+    aspectRatio,
+    format,
+    subtitleFormatting,
+    subtitlePlacement,
+    subtitles,
+    subtitleStyleId,
+  ]);
 
   const handleCopy = useCallback(async () => {
     try {
