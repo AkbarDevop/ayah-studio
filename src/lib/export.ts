@@ -45,8 +45,8 @@ export function generateASS(
 
   let output = `[Script Info]\nTitle: Quran Subtitles — Ayah Studio\nScriptType: v4.00+\nPlayResX: ${playResX}\nPlayResY: ${playResY}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n`;
   output += `[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Alignment, MarginL, MarginR, MarginV, Encoding\n`;
-  output += `Style: Arabic,${st.font},42,&H00${st.arabicColor.slice(1)},&H80000000,0,5,30,30,30,1\n`;
-  output += `Style: Translation,Arial,28,&H00E8E4DC,&H80000000,0,5,30,30,30,1\n\n`;
+  output += `Style: Arabic,${st.font},42,${rgbToAssBgr(st.arabicColor)},&H80000000,0,5,30,30,30,1\n`;
+  output += `Style: Translation,Arial,28,${rgbToAssBgr("#E8E4DC")},&H80000000,0,5,30,30,30,1\n\n`;
   output += `[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
 
   subtitles.forEach((sub) => {
@@ -100,4 +100,12 @@ function getAssResolution(aspectRatio: AspectRatioPreset): {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function rgbToAssBgr(hex: string): string {
+  const normalized = hex.replace("#", "");
+  const r = normalized.slice(0, 2);
+  const g = normalized.slice(2, 4);
+  const b = normalized.slice(4, 6);
+  return `&H00${b}${g}${r}`;
 }

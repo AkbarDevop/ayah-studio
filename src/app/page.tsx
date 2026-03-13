@@ -1,13 +1,6 @@
 "use client";
 
 import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  type ChangeEvent,
-} from "react";
-import {
   BookOpen,
   Layers,
   Star,
@@ -21,19 +14,19 @@ import {
 } from "lucide-react";
 import type {
   Surah,
-  Ayah,
-  TranslationAyah,
-  Subtitle,
   AyahDetectionMatch,
-  AyahDetectionResult,
-  AyahTimingSegment,
   SubtitlePlacement,
   SidebarTab,
   AspectRatioPreset,
   PlaybackMode,
 } from "@/types";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
-import { fetchAllSurahs, fetchSurahWithTranslation } from "@/lib/quran-api";
+import { fetchAllSurahs } from "@/lib/quran-api";
+import { useQuranData } from "@/hooks/useQuranData";
+import { useMediaState } from "@/hooks/useMediaState";
+import { usePlayback, useSimulationTimer } from "@/hooks/usePlayback";
+import { useSubtitles } from "@/hooks/useSubtitles";
+import { useDetectionState } from "@/hooks/useDetectionState";
 import AudioWaveform from "@/components/audio/audio-waveform";
 import SurahBrowser from "@/components/editor/surah-browser";
 import AyahSelector from "@/components/editor/ayah-selector";
@@ -98,349 +91,100 @@ export default function Home() {
   /* ------------------------------------------------------------------ */
   /* State                                                               */
   /* ------------------------------------------------------------------ */
-  const [surahs, setSurahs] = useState<Surah[]>([]);
-  const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
-  const [ayahs, setAyahs] = useState<Ayah[]>([]);
-  const [translations, setTranslations] = useState<TranslationAyah[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [translationEdition, setTranslationEdition] = useState("en.asad");
-  const [selectedAyahIndices, setSelectedAyahIndices] = useState<Set<number>>(
-    new Set()
-  );
-  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
-  const [subtitleStyle, setSubtitleStyle] = useState("classic");
-  const [selectedSubIdx, setSelectedSubIdx] = useState<number | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [showExport, setShowExport] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [defaultDuration, setDefaultDuration] = useState(8);
-  const [tab, setTab] = useState<SidebarTab>("browse");
-  const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoName, setVideoName] = useState<string | null>(null);
-  const [videoDuration, setVideoDuration] = useState(0);
-  const [videoError, setVideoError] = useState<string | null>(null);
-  const [audioSrc, setAudioSrc] = useState<string | null>(null);
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [audioName, setAudioName] = useState<string | null>(null);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const [audioError, setAudioError] = useState<string | null>(null);
-  const [detectingAyahs, setDetectingAyahs] = useState(false);
-  const [detectionError, setDetectionError] = useState<string | null>(null);
-  const [detectionResult, setDetectionResult] =
-    useState<AyahDetectionResult | null>(null);
-  const [appliedDetectionKey, setAppliedDetectionKey] = useState<string | null>(
-    null
-  );
-  const [aspectRatio, setAspectRatio] =
-    useState<AspectRatioPreset>("landscape");
-  const [subtitlePlacement, setSubtitlePlacement] = useState<SubtitlePlacement>(
-    { x: 0.5, y: 0.78 }
-  );
+  const quran = useQuranData();
+  const {
+    currentTime,
+    setCurrentTime,
+    playing,
+    setPlaying,
+    reset: resetPlayback,
+  } = usePlayback();
+  const detection = useDetectionState();
 
-  const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const videoInputRef = useRef<HTMLInputElement | null>(null);
-  const audioInputRef = useRef<HTMLInputElement | null>(null);
+  function resetMediaSession() {
+    detection.reset();
+    resetPlayback();
+  }
+
+  const media = useMediaState(resetMediaSession);
+  const subtitlesState = useSubtitles(resetPlayback);
 
   /* ------------------------------------------------------------------ */
   /* Derived                                                             */
   /* ------------------------------------------------------------------ */
-  const subtitleDuration =
-    subtitles.length > 0 ? Math.max(...subtitles.map((s) => s.end)) + 2 : 0;
-  const activeAudioSrc = audioSrc ?? videoSrc;
-  const activeAudioName = audioSrc ? audioName : videoName;
-  const usingClipAudio = Boolean(videoSrc) && !audioSrc;
-  const detectionSourceFile = audioFile ?? videoFile;
-  const detectionSourceLabel = audioFile
-    ? audioName ?? audioFile.name
-    : videoFile
-      ? videoName ?? videoFile.name
+  const activeAudioSrc = media.activeAudioSrc;
+  const activeAudioName = media.activeAudioName;
+  const usingClipAudio = media.usingClipAudio;
+  const detectionSourceFile = media.audioFile ?? media.videoFile;
+  const detectionSourceLabel = media.audioFile
+    ? media.audioName ?? media.audioFile.name
+    : media.videoFile
+      ? media.videoName ?? media.videoFile.name
       : null;
-  const bestDetection = detectionResult?.matches[0] ?? null;
-  const detectedMediaDuration = Math.max(audioDuration, videoDuration);
+  const bestDetection = detection.detectionResult?.matches[0] ?? null;
+  const detectedMediaDuration = Math.max(
+    media.audioDuration,
+    media.videoDuration
+  );
   const playbackMode: PlaybackMode =
-    activeAudioSrc && !audioError
+    activeAudioSrc && !media.audioError
       ? "audio"
-      : videoSrc
+      : media.videoSrc
         ? "video"
         : "simulation";
   const totalDuration =
-    audioDuration > 0 || videoDuration > 0
-      ? Math.max(audioDuration, videoDuration, subtitleDuration)
-      : subtitleDuration > 0
-        ? subtitleDuration
+    media.audioDuration > 0 || media.videoDuration > 0
+      ? Math.max(
+          media.audioDuration,
+          media.videoDuration,
+          subtitlesState.subtitleDuration
+        )
+      : subtitlesState.subtitleDuration > 0
+        ? subtitlesState.subtitleDuration
         : 60;
-  const previewSubtitle =
-    selectedSubIdx !== null ? subtitles[selectedSubIdx] ?? null : subtitles[0] ?? null;
-
-  useEffect(() => {
-    return () => {
-      if (videoSrc?.startsWith("blob:")) {
-        URL.revokeObjectURL(videoSrc);
-      }
-    };
-  }, [videoSrc]);
-
-  useEffect(() => {
-    return () => {
-      if (audioSrc?.startsWith("blob:")) {
-        URL.revokeObjectURL(audioSrc);
-      }
-    };
-  }, [audioSrc]);
-
-  /* ------------------------------------------------------------------ */
-  /* Data fetching                                                       */
-  /* ------------------------------------------------------------------ */
-  useEffect(() => {
-    fetchAllSurahs()
-      .then(setSurahs)
-      .catch((err) => setError(err.message));
-  }, []);
-
-  const fetchSurahContent = useCallback(
-    (surah: Surah) =>
-      fetchSurahWithTranslation(surah.number, translationEdition),
-    [translationEdition]
-  );
-
-  const loadSurah = useCallback(
-    async (surah: Surah) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { ayahs: a, translations: t } = await fetchSurahContent(surah);
-        setAyahs(a);
-        setTranslations(t);
-        setSelectedSurah(surah);
-        setSelectedAyahIndices(new Set());
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load surah");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [fetchSurahContent]
-  );
-
-  /* Refetch translation when edition changes */
-  useEffect(() => {
-    if (!selectedSurah) return;
-    let cancelled = false;
-    setLoading(true);
-    fetchSurahContent(selectedSurah)
-      .then(({ ayahs: a, translations: t }) => {
-        if (cancelled) return;
-        setAyahs(a);
-        setTranslations(t);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchSurahContent, selectedSurah]);
+  const previewSubtitle = subtitlesState.previewSubtitle;
 
   /* ------------------------------------------------------------------ */
   /* Subtitle generation                                                 */
   /* ------------------------------------------------------------------ */
   function generateSubtitles() {
-    const sorted = Array.from(selectedAyahIndices).sort((a, b) => a - b);
-    const newSubs = buildSubtitlesFromAyahRange(
-      sorted.map((idx) => ayahs[idx]).filter(Boolean),
-      translations,
-      {
-        fallbackDuration: defaultDuration,
-      }
+    subtitlesState.generateSubtitles(
+      quran.ayahs,
+      quran.translations,
+      quran.selectedAyahIndices
     );
-    setSubtitles(newSubs);
-    setSelectedSubIdx(null);
-    setCurrentTime(0);
-    setPlaying(false);
-    setTab("subtitles");
   }
 
   /* ------------------------------------------------------------------ */
   /* Playback simulation                                                 */
   /* ------------------------------------------------------------------ */
-  useEffect(() => {
-    if (playbackMode !== "simulation") {
-      if (playIntervalRef.current) {
-        clearInterval(playIntervalRef.current);
-        playIntervalRef.current = null;
-      }
-      return;
-    }
-
-    if (playing) {
-      playIntervalRef.current = setInterval(() => {
-        setCurrentTime((prev) => {
-          const next = prev + 0.1;
-          if (next >= totalDuration) {
-            setPlaying(false);
-            return 0;
-          }
-          return next;
-        });
-      }, 100);
-    } else if (playIntervalRef.current) {
-      clearInterval(playIntervalRef.current);
-      playIntervalRef.current = null;
-    }
-    return () => {
-      if (playIntervalRef.current) {
-        clearInterval(playIntervalRef.current);
-      }
-    };
-  }, [playbackMode, playing, totalDuration]);
+  useSimulationTimer(
+    playbackMode,
+    playing,
+    totalDuration,
+    setCurrentTime,
+    setPlaying
+  );
 
   function togglePlayPause() {
-    if (!activeAudioSrc && !videoSrc && subtitles.length === 0) return;
+    if (!activeAudioSrc && !media.videoSrc && subtitlesState.subtitles.length === 0) return;
     setPlaying((prev) => !prev);
   }
 
-  function handleVideoUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("video/")) {
-      setVideoError("Please choose a valid video file.");
-      event.target.value = "";
-      return;
-    }
-
-    setVideoError(null);
-    setDetectionError(null);
-    setDetectionResult(null);
-    setAppliedDetectionKey(null);
-    setPlaying(false);
-    setCurrentTime(0);
-    setVideoDuration(0);
-    if (!audioSrc) {
-      setAudioDuration(0);
-      setAudioError(null);
-    }
-    setVideoFile(file);
-    setVideoName(file.name);
-    setVideoSrc(URL.createObjectURL(file));
-    event.target.value = "";
-  }
-
-  function handleAudioUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const isAudioFile =
-      file.type.startsWith("audio/") ||
-      file.type.startsWith("video/") ||
-      /\.(mp3|wav|m4a|aac|ogg|webm)$/i.test(file.name);
-
-    if (!isAudioFile) {
-      setAudioError("Please choose a valid audio file.");
-      event.target.value = "";
-      return;
-    }
-
-    setAudioError(null);
-    setDetectionError(null);
-    setDetectionResult(null);
-    setAppliedDetectionKey(null);
-    setPlaying(false);
-    setCurrentTime(0);
-    setAudioDuration(0);
-    setAudioFile(file);
-    setAudioName(file.name);
-    setAudioSrc(URL.createObjectURL(file));
-    event.target.value = "";
-  }
-
-  function clearVideo() {
-    setPlaying(false);
-    setCurrentTime(0);
-    setVideoDuration(0);
-    setDetectionError(null);
-    setDetectionResult(null);
-    setAppliedDetectionKey(null);
-    if (!audioSrc) {
-      setAudioDuration(0);
-      setAudioError(null);
-    }
-    setVideoFile(null);
-    setVideoName(null);
-    setVideoSrc(null);
-    setVideoError(null);
-  }
-
-  function clearAudio() {
-    setPlaying(false);
-    setCurrentTime(0);
-    setAudioDuration(0);
-    setDetectionError(null);
-    setDetectionResult(null);
-    setAppliedDetectionKey(null);
-    setAudioFile(null);
-    setAudioName(null);
-    setAudioSrc(null);
-    setAudioError(null);
-  }
-
   async function handleDetectAyahs() {
-    if (!detectionSourceFile) {
-      setDetectionError("Upload a clip or override audio before detecting ayahs.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("media", detectionSourceFile);
-
-    setDetectingAyahs(true);
-    setDetectionError(null);
-    setAppliedDetectionKey(null);
-
-    try {
-      const response = await fetch("/api/ayah-detect", {
-        method: "POST",
-        body: formData,
-      });
-      const payload = (await response.json()) as
-        | AyahDetectionResult
-        | { error?: string };
-
-      if (!response.ok) {
-        throw new Error(
-          "error" in payload && payload.error
-            ? payload.error
-            : "Ayah detection failed."
-        );
-      }
-
-      setDetectionResult(payload as AyahDetectionResult);
-    } catch (err) {
-      setDetectionResult(null);
-      setDetectionError(
-        err instanceof Error ? err.message : "Ayah detection failed."
-      );
-    } finally {
-      setDetectingAyahs(false);
-    }
+    await detection.detectAyahs(detectionSourceFile);
   }
 
   async function applyDetectedMatch(match: AyahDetectionMatch) {
     try {
-      setDetectionError(null);
+      detection.setDetectionError(null);
 
-      let targetSurah: Surah | undefined = surahs.find(
+      let targetSurah: Surah | undefined = quran.surahs.find(
         (surah) => surah.number === match.surahNumber
       );
       if (!targetSurah) {
         const allSurahs = await fetchAllSurahs();
-        setSurahs(allSurahs);
+        quran.setSurahs(allSurahs);
         targetSurah = allSurahs.find(
           (surah) => surah.number === match.surahNumber
         );
@@ -450,10 +194,11 @@ export default function Home() {
         throw new Error("The detected surah could not be loaded.");
       }
 
-      const existingSurahIsLoaded = selectedSurah?.number === targetSurah.number;
+      const existingSurahIsLoaded =
+        quran.selectedSurah?.number === targetSurah.number;
       const content = existingSurahIsLoaded
-        ? { ayahs, translations }
-        : await fetchSurahContent(targetSurah);
+        ? { ayahs: quran.ayahs, translations: quran.translations }
+        : await quran.fetchSurahContent(targetSurah);
       const rangeIndices = new Set(
         Array.from(
           { length: match.endAyah - match.startAyah + 1 },
@@ -465,63 +210,20 @@ export default function Home() {
           ayah.numberInSurah >= match.startAyah && ayah.numberInSurah <= match.endAyah
       );
 
-      setAyahs(content.ayahs);
-      setTranslations(content.translations);
-      setSelectedSurah(targetSurah);
-      setSelectedAyahIndices(rangeIndices);
-      setSubtitles(
-        buildSubtitlesFromAyahRange(rangeAyahs, content.translations, {
+      quran.setAyahs(content.ayahs);
+      quran.setTranslations(content.translations);
+      quran.setSelectedSurah(targetSurah);
+      quran.setSelectedAyahIndices(rangeIndices);
+      subtitlesState.applyDetectedSubtitles(rangeAyahs, content.translations, {
           detectedTimings: match.timings,
           clipDuration: detectedMediaDuration > 0 ? detectedMediaDuration : undefined,
-          fallbackDuration: defaultDuration,
-        })
-      );
-      setSelectedSubIdx(null);
-      setCurrentTime(0);
-      setPlaying(false);
-      setTab("subtitles");
-      setAppliedDetectionKey(getDetectionKey(match));
+        });
+      detection.setAppliedDetectionKey(getDetectionKey(match));
     } catch (err) {
-      setDetectionError(
+      detection.setDetectionError(
         err instanceof Error ? err.message : "Failed to apply the detected ayahs."
       );
     }
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Subtitle editing helpers                                            */
-  /* ------------------------------------------------------------------ */
-  function handleSubtitleChange(updated: Subtitle) {
-    if (selectedSubIdx === null) return;
-    setSubtitles((prev) =>
-      prev.map((s, i) => (i === selectedSubIdx ? updated : s))
-    );
-  }
-
-  function handleSubtitleDelete() {
-    if (selectedSubIdx === null) return;
-    setSubtitles((prev) => prev.filter((_, i) => i !== selectedSubIdx));
-    setSelectedSubIdx(null);
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Ayah selection helpers                                              */
-  /* ------------------------------------------------------------------ */
-  function toggleAyahIndex(index: number) {
-    setSelectedAyahIndices((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  }
-
-  function selectAllAyahs() {
-    setSelectedAyahIndices(new Set(ayahs.map((_, i) => i)));
-  }
-
-  function deselectAllAyahs() {
-    setSelectedAyahIndices(new Set());
   }
 
   /* ------------------------------------------------------------------ */
@@ -596,10 +298,10 @@ export default function Home() {
         </div>
 
         {/* Export Button */}
-        {subtitles.length > 0 && (
+        {subtitlesState.subtitles.length > 0 && (
           <button
             type="button"
-            onClick={() => setShowExport(true)}
+            onClick={() => subtitlesState.setShowExport(true)}
             className="flex items-center gap-2 rounded-lg bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-[var(--bg)] shadow-lg shadow-[var(--gold)]/20 transition-all hover:bg-[var(--gold-light)] active:scale-[0.98]"
           >
             <Download className="h-4 w-4" />
@@ -619,10 +321,10 @@ export default function Home() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setTab(id)}
+                onClick={() => subtitlesState.setTab(id)}
                 className={[
                   "flex flex-1 items-center justify-center gap-1.5 py-3 text-xs font-medium uppercase tracking-wider transition-colors font-[family-name:var(--font-ibm-plex)]",
-                  tab === id
+                  subtitlesState.tab === id
                     ? "border-b-2 border-[var(--gold)] bg-[var(--surface-alt)] text-[var(--gold)]"
                     : "text-[var(--text-muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--text)]",
                 ].join(" ")}
@@ -636,58 +338,53 @@ export default function Home() {
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto">
             {/* ------ Browse Tab ------ */}
-            {tab === "browse" && (
+            {subtitlesState.tab === "browse" && (
               <>
-                {loading && (
+                {quran.loading && (
                   <div className="flex items-center justify-center py-16">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
                   </div>
                 )}
 
-                {error && (
+                {quran.error && (
                   <div className="mx-4 mt-4 rounded-lg border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
-                    {error}
+                    {quran.error}
                   </div>
                 )}
 
-                {!loading && !selectedSurah && (
+                {!quran.loading && !quran.selectedSurah && (
                   <SurahBrowser
-                    surahs={surahs}
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                    onSelect={loadSurah}
-                    translationEdition={translationEdition}
-                    onTranslationChange={setTranslationEdition}
+                    surahs={quran.surahs}
+                    searchQuery={quran.searchQuery}
+                    onSearchChange={quran.setSearchQuery}
+                    onSelect={quran.loadSurah}
+                    translationEdition={quran.translationEdition}
+                    onTranslationChange={quran.setTranslationEdition}
                   />
                 )}
 
-                {!loading && selectedSurah && (
+                {!quran.loading && quran.selectedSurah && (
                   <AyahSelector
-                    surahName={selectedSurah.name}
-                    ayahs={ayahs}
-                    translations={translations}
-                    selectedIndices={selectedAyahIndices}
-                    onToggle={toggleAyahIndex}
-                    onSelectAll={selectAllAyahs}
-                    onDeselectAll={deselectAllAyahs}
-                    onBack={() => {
-                      setSelectedSurah(null);
-                      setAyahs([]);
-                      setTranslations([]);
-                      setSelectedAyahIndices(new Set());
-                    }}
+                    surahName={quran.selectedSurah.name}
+                    ayahs={quran.ayahs}
+                    translations={quran.translations}
+                    selectedIndices={quran.selectedAyahIndices}
+                    onToggle={quran.toggleAyahIndex}
+                    onSelectAll={quran.selectAllAyahs}
+                    onDeselectAll={quran.deselectAllAyahs}
+                    onBack={quran.clearSelection}
                     onGenerate={generateSubtitles}
-                    defaultDuration={defaultDuration}
-                    onDurationChange={setDefaultDuration}
+                    defaultDuration={subtitlesState.defaultDuration}
+                    onDurationChange={subtitlesState.setDefaultDuration}
                   />
                 )}
               </>
             )}
 
             {/* ------ Subtitles Tab ------ */}
-            {tab === "subtitles" && (
+            {subtitlesState.tab === "subtitles" && (
               <div className="p-4">
-                {subtitles.length === 0 ? (
+                {subtitlesState.subtitles.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <Layers className="mb-3 h-8 w-8 text-[var(--text-dim)]" />
                     <p className="text-sm text-[var(--text-muted)]">
@@ -700,20 +397,20 @@ export default function Home() {
                 ) : (
                   <div className="space-y-2">
                     <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                      {subtitles.length} subtitle
-                      {subtitles.length !== 1 ? "s" : ""}
+                      {subtitlesState.subtitles.length} subtitle
+                      {subtitlesState.subtitles.length !== 1 ? "s" : ""}
                     </p>
-                    {subtitles.map((sub, idx) => (
+                    {subtitlesState.subtitles.map((sub, idx) => (
                       <button
                         key={`sub-${sub.ayahNum}-${idx}`}
                         type="button"
                         onClick={() => {
-                          setSelectedSubIdx(idx);
+                          subtitlesState.setSelectedSubIdx(idx);
                           setCurrentTime(sub.start);
                         }}
                         className={[
                           "w-full rounded-lg border p-3 text-left transition-all",
-                          selectedSubIdx === idx
+                          subtitlesState.selectedSubIdx === idx
                             ? "border-[var(--gold-dim)] bg-[var(--surface-alt)]"
                             : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
                         ].join(" ")}
@@ -741,7 +438,7 @@ export default function Home() {
             )}
 
             {/* ------ Style Tab ------ */}
-            {tab === "style" && (
+            {subtitlesState.tab === "style" && (
               <div className="p-4">
                 <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
                   Subtitle Style
@@ -749,12 +446,12 @@ export default function Home() {
 
                 <div className="space-y-3">
                   {SUBTITLE_STYLES.map((style) => {
-                    const isActive = subtitleStyle === style.id;
+                    const isActive = subtitlesState.subtitleStyle === style.id;
                     return (
                       <button
                         key={style.id}
                         type="button"
-                        onClick={() => setSubtitleStyle(style.id)}
+                        onClick={() => subtitlesState.setSubtitleStyle(style.id)}
                         className={[
                           "w-full rounded-lg border p-3 text-left transition-all",
                           isActive
@@ -818,8 +515,8 @@ export default function Home() {
                       Subtitle Position
                     </p>
                     <span className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)]">
-                      X {Math.round(subtitlePlacement.x * 100)}% · Y{" "}
-                      {Math.round(subtitlePlacement.y * 100)}%
+                      X {Math.round(subtitlesState.subtitlePlacement.x * 100)}% · Y{" "}
+                      {Math.round(subtitlesState.subtitlePlacement.y * 100)}%
                     </span>
                   </div>
                   <p className="mb-3 text-xs leading-relaxed text-[var(--text-muted)]">
@@ -829,16 +526,18 @@ export default function Home() {
                   <div className="space-y-2">
                     {SUBTITLE_POSITION_PRESETS.map((preset) => {
                       const isActive =
-                        Math.abs(subtitlePlacement.x - preset.placement.x) <
+                        Math.abs(subtitlesState.subtitlePlacement.x - preset.placement.x) <
                           0.01 &&
-                        Math.abs(subtitlePlacement.y - preset.placement.y) <
+                        Math.abs(subtitlesState.subtitlePlacement.y - preset.placement.y) <
                           0.01;
 
                       return (
                         <button
                           key={preset.id}
                           type="button"
-                          onClick={() => setSubtitlePlacement(preset.placement)}
+                          onClick={() =>
+                            subtitlesState.setSubtitlePlacement(preset.placement)
+                          }
                           className={[
                             "w-full rounded-lg border p-3 text-left transition-colors",
                             isActive
@@ -875,18 +574,18 @@ export default function Home() {
         <main className="flex flex-1 flex-col overflow-hidden bg-[var(--bg)]">
           <div className="border-b border-[var(--border)] bg-[var(--surface)]/70 px-4 py-3">
             <input
-              ref={videoInputRef}
+              ref={media.videoInputRef}
               type="file"
               accept="video/*"
               className="hidden"
-              onChange={handleVideoUpload}
+              onChange={media.handleVideoUpload}
             />
             <input
-              ref={audioInputRef}
+              ref={media.audioInputRef}
               type="file"
               accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.ogg,.webm"
               className="hidden"
-              onChange={handleAudioUpload}
+              onChange={media.handleAudioUpload}
             />
 
             <div className="flex flex-wrap items-start gap-4">
@@ -897,17 +596,17 @@ export default function Home() {
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => videoInputRef.current?.click()}
+                    onClick={() => media.videoInputRef.current?.click()}
                     className="flex items-center gap-2 rounded-lg bg-[var(--gold)] px-3.5 py-2 text-sm font-semibold text-[var(--bg)] transition-colors hover:bg-[var(--gold-light)]"
                   >
                     <Upload className="h-4 w-4" />
-                    <span>{videoSrc ? "Replace Clip" : "Upload Clip"}</span>
+                    <span>{media.videoSrc ? "Replace Clip" : "Upload Clip"}</span>
                   </button>
 
-                  {videoSrc && (
+                  {media.videoSrc && (
                     <button
                       type="button"
-                      onClick={clearVideo}
+                      onClick={media.clearVideo}
                       className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
                     >
                       <X className="h-4 w-4" />
@@ -916,20 +615,21 @@ export default function Home() {
                   )}
 
                   <span className="text-sm text-[var(--text-muted)]">
-                    {videoName ?? "No clip loaded yet. Preview uses the design canvas."}
+                    {media.videoName ??
+                      "No clip loaded yet. Preview uses the design canvas."}
                   </span>
                 </div>
 
-                {(videoDuration > 0 || videoError) && (
+                {(media.videoDuration > 0 || media.videoError) && (
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    {videoDuration > 0 && (
+                    {media.videoDuration > 0 && (
                       <span className="font-mono-ui text-[var(--text-dim)]">
-                        Duration {videoDuration.toFixed(1)}s
+                        Duration {media.videoDuration.toFixed(1)}s
                       </span>
                     )}
-                    {videoError && (
+                    {media.videoError && (
                       <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
-                        {videoError}
+                        {media.videoError}
                       </span>
                     )}
                   </div>
@@ -943,17 +643,17 @@ export default function Home() {
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => audioInputRef.current?.click()}
+                    onClick={() => media.audioInputRef.current?.click()}
                     className="flex items-center gap-2 rounded-lg bg-[var(--emerald)] px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--emerald-light)]"
                   >
                     <Upload className="h-4 w-4" />
-                    <span>{audioSrc ? "Replace Override" : "Override Audio"}</span>
+                    <span>{media.audioSrc ? "Replace Override" : "Override Audio"}</span>
                   </button>
 
-                  {audioSrc && (
+                  {media.audioSrc && (
                     <button
                       type="button"
-                      onClick={clearAudio}
+                      onClick={media.clearAudio}
                       className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
                     >
                       <X className="h-4 w-4" />
@@ -962,27 +662,27 @@ export default function Home() {
                   )}
 
                   <span className="text-sm text-[var(--text-muted)]">
-                    {audioSrc
-                      ? `Override track: ${audioName}`
-                      : videoName
-                        ? `Using clip audio from ${videoName}`
+                    {media.audioSrc
+                      ? `Override track: ${media.audioName}`
+                      : media.videoName
+                        ? `Using clip audio from ${media.videoName}`
                         : "Clip audio is used automatically. Override is optional."}
                   </span>
                 </div>
 
-                {(audioDuration > 0 || audioError) && (
+                {(media.audioDuration > 0 || media.audioError) && (
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    {audioDuration > 0 && (
+                    {media.audioDuration > 0 && (
                       <span className="font-mono-ui text-[var(--text-dim)]">
-                        Duration {audioDuration.toFixed(1)}s
+                        Duration {media.audioDuration.toFixed(1)}s
                       </span>
                     )}
-                    {audioError && (
+                    {media.audioError && (
                       <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
-                        {audioError}
+                        {media.audioError}
                       </span>
                     )}
-                    {usingClipAudio && !audioError && (
+                    {usingClipAudio && !media.audioError && (
                       <span className="rounded-full bg-[var(--emerald)]/12 px-2.5 py-1 text-[var(--emerald-light)]">
                         Using clip audio automatically
                       </span>
@@ -997,12 +697,12 @@ export default function Home() {
                 </p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {ASPECT_RATIO_OPTIONS.map(({ id, label, hint, icon: Icon }) => {
-                    const isActive = aspectRatio === id;
+                    const isActive = subtitlesState.aspectRatio === id;
                     return (
                       <button
                         key={id}
                         type="button"
-                        onClick={() => setAspectRatio(id)}
+                        onClick={() => subtitlesState.setAspectRatio(id)}
                         className={[
                           "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors",
                           isActive
@@ -1053,20 +753,22 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleDetectAyahs}
-                  disabled={!detectionSourceFile || detectingAyahs}
+                  disabled={!detectionSourceFile || detection.detectingAyahs}
                   className={[
                     "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
-                    detectionSourceFile && !detectingAyahs
+                    detectionSourceFile && !detection.detectingAyahs
                       ? "bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-light)]"
                       : "cursor-not-allowed bg-[var(--border)] text-[var(--text-dim)]",
                   ].join(" ")}
                 >
                   <Sparkles className="h-4 w-4" />
-                  <span>{detectingAyahs ? "Detecting..." : "Detect Ayah Range"}</span>
+                  <span>
+                    {detection.detectingAyahs ? "Detecting..." : "Detect Ayah Range"}
+                  </span>
                 </button>
               </div>
 
-              {detectingAyahs && (
+              {detection.detectingAyahs && (
                 <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
                   <p className="text-sm text-[var(--text-muted)]">
@@ -1075,13 +777,13 @@ export default function Home() {
                 </div>
               )}
 
-              {detectionError && (
+              {detection.detectionError && (
                 <div className="mt-4 rounded-lg border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
-                  {detectionError}
+                  {detection.detectionError}
                 </div>
               )}
 
-              {detectionResult && (
+              {detection.detectionResult && (
                 <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                   <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
@@ -1098,11 +800,11 @@ export default function Home() {
                       dir="rtl"
                       className="mt-3 font-arabic-ui text-lg leading-loose text-[var(--text)]"
                     >
-                      {detectionResult.transcript}
+                      {detection.detectionResult.transcript}
                     </p>
-                    {detectionResult.warning && (
+                    {detection.detectionResult.warning && (
                       <p className="mt-3 text-xs leading-relaxed text-[var(--text-dim)]">
-                        {detectionResult.warning}
+                        {detection.detectionResult.warning}
                       </p>
                     )}
                   </div>
@@ -1112,14 +814,15 @@ export default function Home() {
                       Suggested Ranges
                     </p>
                     <div className="mt-3 space-y-2">
-                      {detectionResult.matches.length === 0 ? (
+                      {detection.detectionResult.matches.length === 0 ? (
                         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-sm text-[var(--text-muted)]">
                           No confident ayah match yet. Try a cleaner clip or upload a dedicated recitation audio track.
                         </div>
                       ) : (
-                        detectionResult.matches.map((match) => {
+                        detection.detectionResult.matches.map((match) => {
                           const matchKey = getDetectionKey(match);
-                          const isApplied = appliedDetectionKey === matchKey;
+                          const isApplied =
+                            detection.appliedDetectionKey === matchKey;
 
                           return (
                             <div
@@ -1184,22 +887,22 @@ export default function Home() {
           {/* Video Preview */}
           <div className="p-4 pb-2">
             <VideoPreview
-              subtitles={subtitles}
+              subtitles={subtitlesState.subtitles}
               currentTime={currentTime}
-              subtitleStyleId={subtitleStyle}
-              subtitlePlacement={subtitlePlacement}
+              subtitleStyleId={subtitlesState.subtitleStyle}
+              subtitlePlacement={subtitlesState.subtitlePlacement}
               playbackMode={playbackMode}
-              aspectRatio={aspectRatio}
-              videoSrc={videoSrc}
-              videoName={videoName}
-              videoError={videoError}
+              aspectRatio={subtitlesState.aspectRatio}
+              videoSrc={media.videoSrc}
+              videoName={media.videoName}
+              videoError={media.videoError}
               playing={playing}
               onPlayPause={togglePlayPause}
               onTimeChange={setCurrentTime}
-              onDurationChange={setVideoDuration}
+              onDurationChange={media.setVideoDuration}
               onPlayingChange={setPlaying}
-              onVideoError={setVideoError}
-              onSubtitlePlacementChange={setSubtitlePlacement}
+              onVideoError={media.setVideoError}
+              onSubtitlePlacementChange={subtitlesState.setSubtitlePlacement}
               previewSubtitle={previewSubtitle}
             />
           </div>
@@ -1208,28 +911,28 @@ export default function Home() {
             <AudioWaveform
               audioSrc={activeAudioSrc}
               audioName={activeAudioName}
-              audioDuration={audioDuration}
+              audioDuration={media.audioDuration}
               usingClipAudio={usingClipAudio}
-              hasOverride={Boolean(audioSrc)}
+              hasOverride={Boolean(media.audioSrc)}
               currentTime={currentTime}
               playing={playing}
               onTimeChange={setCurrentTime}
-              onDurationChange={setAudioDuration}
+              onDurationChange={media.setAudioDuration}
               onPlayingChange={setPlaying}
-              onAudioError={setAudioError}
+              onAudioError={media.setAudioError}
             />
           </div>
 
           {/* Timeline */}
           <div className="px-4 py-2">
             <TimelineTrack
-              subtitles={subtitles}
+              subtitles={subtitlesState.subtitles}
               currentTime={currentTime}
               totalDuration={totalDuration}
-              selectedIdx={selectedSubIdx}
+              selectedIdx={subtitlesState.selectedSubIdx}
               onSelect={(idx) => {
-                setSelectedSubIdx(idx);
-                setCurrentTime(subtitles[idx].start);
+                subtitlesState.setSelectedSubIdx(idx);
+                setCurrentTime(subtitlesState.subtitles[idx].start);
               }}
               onSeek={setCurrentTime}
             />
@@ -1237,16 +940,17 @@ export default function Home() {
 
           {/* Subtitle Editor or Empty State */}
           <div className="flex-1 overflow-y-auto px-4 py-2">
-            {selectedSubIdx !== null && subtitles[selectedSubIdx] ? (
+            {subtitlesState.selectedSubIdx !== null &&
+            subtitlesState.subtitles[subtitlesState.selectedSubIdx] ? (
               <SubtitleEditor
-                subtitle={subtitles[selectedSubIdx]}
-                onChange={handleSubtitleChange}
-                onDelete={handleSubtitleDelete}
+                subtitle={subtitlesState.subtitles[subtitlesState.selectedSubIdx]}
+                onChange={subtitlesState.handleSubtitleChange}
+                onDelete={subtitlesState.handleSubtitleDelete}
               />
             ) : (
               <div className="flex h-full items-center justify-center">
                 <p className="text-sm text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
-                  {subtitles.length > 0
+                  {subtitlesState.subtitles.length > 0
                     ? "Select a subtitle on the timeline or sidebar to edit"
                     : "Select ayahs from the sidebar to get started"}
                 </p>
@@ -1259,13 +963,13 @@ export default function Home() {
       {/* ============================================================ */}
       {/* EXPORT MODAL                                                  */}
       {/* ============================================================ */}
-      {showExport && (
+      {subtitlesState.showExport && (
         <ExportPanel
-          subtitles={subtitles}
-          subtitleStyleId={subtitleStyle}
-          subtitlePlacement={subtitlePlacement}
-          aspectRatio={aspectRatio}
-          onClose={() => setShowExport(false)}
+          subtitles={subtitlesState.subtitles}
+          subtitleStyleId={subtitlesState.subtitleStyle}
+          subtitlePlacement={subtitlesState.subtitlePlacement}
+          aspectRatio={subtitlesState.aspectRatio}
+          onClose={() => subtitlesState.setShowExport(false)}
         />
       )}
     </div>
@@ -1274,94 +978,6 @@ export default function Home() {
 
 function getDetectionKey(match: AyahDetectionMatch): string {
   return `${match.surahNumber}:${match.startAyah}:${match.endAyah}`;
-}
-
-function buildSubtitlesFromAyahRange(
-  ayahRange: Ayah[],
-  translations: TranslationAyah[],
-  options: {
-    detectedTimings?: AyahTimingSegment[];
-    clipDuration?: number;
-    fallbackDuration: number;
-  }
-): Subtitle[] {
-  if (ayahRange.length === 0) {
-    return [];
-  }
-
-  if (options.detectedTimings?.length === ayahRange.length) {
-    const timingByAyah = new Map(
-      options.detectedTimings.map((timing) => [timing.ayahNum, timing])
-    );
-
-    return ayahRange.map((ayah, index) => {
-      const translation = translations.find(
-        (item) => item.numberInSurah === ayah.numberInSurah
-      );
-      const timing = timingByAyah.get(ayah.numberInSurah);
-
-      return {
-        ayahNum: ayah.numberInSurah,
-        arabic: ayah.text,
-        translation: translation?.text ?? "",
-        start: timing?.start ?? 0,
-        end: timing?.end ?? options.fallbackDuration * (index + 1),
-      };
-    });
-  }
-
-  const clipDuration = options.clipDuration ?? 0;
-
-  if (clipDuration > 0) {
-    const weights = ayahRange.map((ayah) =>
-      Math.max(countTimingUnits(ayah.text), 1)
-    );
-    const totalWeight = weights.reduce((sum, value) => sum + value, 0);
-    let consumedWeight = 0;
-
-    return ayahRange.map((ayah, index) => {
-      const translation = translations.find(
-        (item) => item.numberInSurah === ayah.numberInSurah
-      );
-      const start = (consumedWeight / totalWeight) * clipDuration;
-      consumedWeight += weights[index];
-      const end =
-        index === ayahRange.length - 1
-          ? clipDuration
-          : (consumedWeight / totalWeight) * clipDuration;
-
-      return {
-        ayahNum: ayah.numberInSurah,
-        arabic: ayah.text,
-        translation: translation?.text ?? "",
-        start,
-        end,
-      };
-    });
-  }
-
-  let offset = 0;
-  const gap = 0.5;
-
-  return ayahRange.map((ayah) => {
-    const translation = translations.find(
-      (item) => item.numberInSurah === ayah.numberInSurah
-    );
-    const subtitle: Subtitle = {
-      ayahNum: ayah.numberInSurah,
-      arabic: ayah.text,
-      translation: translation?.text ?? "",
-      start: offset,
-      end: offset + options.fallbackDuration,
-    };
-
-    offset += options.fallbackDuration + gap;
-    return subtitle;
-  });
-}
-
-function countTimingUnits(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
 function getTimingSourceLabel(source: NonNullable<AyahDetectionMatch["timingSource"]>) {
