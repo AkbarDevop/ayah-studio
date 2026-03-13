@@ -172,9 +172,6 @@ export default function Home() {
     subtitlesState.subtitleStyle,
     subtitlesState.subtitleFormatting
   );
-  const hasMedia = Boolean(media.videoSrc || media.audioSrc);
-  const hasDetection = Boolean(detection.detectionResult);
-  const hasSubtitles = subtitlesState.subtitles.length > 0;
   const selectedAyahCount = quran.selectedAyahIndices.size;
   const activeSubtitleStyle =
     SUBTITLE_STYLES.find(
@@ -191,81 +188,7 @@ export default function Home() {
     : detection.detectingAyahs
       ? "Analyzing"
       : "Idle";
-  const sourceSummary = media.videoName
-    ? "Clip Ready"
-    : media.audioName
-      ? "Audio Override"
-      : "Awaiting Source";
-  const detectionSummary = bestDetection
-    ? `${bestDetection.surahName} ${bestDetection.startAyah}${
-        bestDetection.endAyah !== bestDetection.startAyah
-          ? `-${bestDetection.endAyah}`
-          : ""
-      }`
-    : detection.detectingAyahs
-      ? "Listening for ayahs"
-      : "No detection yet";
-  const workflowSteps: Array<{
-    id: string;
-    label: string;
-    detail: string;
-    icon: typeof Upload;
-    state: "done" | "active" | "pending";
-  }> = [
-    {
-      id: "source",
-      label: "Source",
-      detail: hasMedia ? "Clip or audio loaded" : "Upload or import a clip",
-      icon: Upload,
-      state: hasMedia ? "done" : "active",
-    },
-    {
-      id: "detect",
-      label: "Detect",
-      detail: hasDetection
-        ? "Ayah range matched"
-        : hasMedia
-          ? "Auto-detection ready"
-          : "Waiting for source",
-      icon: Sparkles,
-      state: hasDetection ? "done" : hasMedia ? "active" : "pending",
-    },
-    {
-      id: "edit",
-      label: "Edit",
-      detail: hasSubtitles
-        ? `${subtitlesState.subtitles.length} timed blocks`
-        : hasDetection
-          ? "Generate or apply subtitles"
-          : "Selection comes next",
-      icon: Layers,
-      state: hasSubtitles ? "done" : hasDetection ? "active" : "pending",
-    },
-    {
-      id: "style",
-      label: "Style",
-      detail:
-        subtitlesState.tab === "style"
-          ? "Inspector open"
-          : "Tune fonts and placement",
-      icon: Star,
-      state:
-        subtitlesState.tab === "style"
-          ? "active"
-          : hasSubtitles
-            ? "done"
-            : "pending",
-    },
-    {
-      id: "export",
-      label: "Export",
-      detail: hasSubtitles
-        ? "SRT, ASS, JSON ready"
-        : "Needs subtitles first",
-      icon: Download,
-      state: hasSubtitles ? "active" : "pending",
-    },
-  ];
+  const hasMedia = Boolean(media.videoSrc || media.audioSrc);
   const autoDetectedSourceKeyRef = useRef<string | null>(null);
   const autoAppliedDetectionKeyRef = useRef<string | null>(null);
 
@@ -509,21 +432,17 @@ export default function Home() {
             </div>
 
             <div>
-              <p className="section-kicker">Studio Shell</p>
-              <h1 className="mt-1 text-[24px] font-semibold leading-tight text-[var(--gold)]">
+              <h1 className="text-[24px] font-semibold leading-tight text-[var(--gold)]">
                 Ayah Studio
               </h1>
               <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-[family-name:var(--font-ibm-plex)]">
-                Quran video editor for clip-first subtitle workflows
+                Quran video editor
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="metric-pill">
-              {activeRatioOption.label} · {activeRatioOption.hint}
-            </span>
-            <span className="metric-pill">{activeSubtitleStyle}</span>
+            <span className="metric-pill">{activeRatioOption.label}</span>
             <span className="metric-pill">{detectionProviderLabel}</span>
             {subtitlesState.subtitles.length > 0 && (
               <button
@@ -543,16 +462,14 @@ export default function Home() {
         <div className="mx-auto grid h-full max-w-[1800px] gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
           <aside className="studio-panel flex min-h-0 flex-col overflow-hidden">
             <div className="border-b border-[var(--border)]/80 p-4">
-              <div className="rounded-[1.25rem] border border-[var(--border)]/70 bg-black/10 p-4">
-                <p className="section-kicker">Library</p>
+              <div className="rounded-[1.1rem] border border-[var(--border)]/55 bg-black/5 p-4">
                 <div className="mt-3 flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-semibold text-[var(--text)]">
-                      Quran Browser & Style Desk
+                    <h2 className="text-base font-semibold text-[var(--text)]">
+                      Library
                     </h2>
-                    <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-                      Pick ayahs, review generated blocks, and tune the subtitle
-                      system from one place.
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      Browse ayahs, blocks, and styling.
                     </p>
                   </div>
                   <span className="metric-pill">
@@ -584,7 +501,6 @@ export default function Home() {
                   <span className="metric-pill">
                     {subtitlesState.subtitles.length} blocks
                   </span>
-                  <span className="metric-pill">{activeSubtitleStyle}</span>
                 </div>
               </div>
             </div>
@@ -592,16 +508,6 @@ export default function Home() {
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {subtitlesState.tab === "browse" && (
                 <>
-                  {!quran.loading && !quran.selectedSurah && (
-                    <div className="studio-panel-soft mb-4 px-4 py-3">
-                      <p className="section-kicker">Browse</p>
-                      <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
-                        Search the mushaf, choose a translation, then select the
-                        ayahs you want to bring into the editor.
-                      </p>
-                    </div>
-                  )}
-
                   {quran.loading && (
                     <div className="flex items-center justify-center py-16">
                       <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
@@ -1097,66 +1003,27 @@ export default function Home() {
 
           <main className="min-h-0 overflow-y-auto pr-1">
             <div className="space-y-4 pb-1">
-              <section className="grid gap-3 lg:grid-cols-3">
-                <OverviewCard
-                  icon={Upload}
-                  label="Source"
-                  value={sourceSummary}
-                  detail={
-                    detectionSourceLabel
-                      ? detectionSourceLabel
-                      : "Upload or import a reciter clip to begin."
-                  }
-                />
-                <OverviewCard
-                  icon={Sparkles}
-                  label="Detection"
-                  value={detectionSummary}
-                  detail={`Engine: ${detectionProviderLabel}`}
-                  tone={bestDetection ? "accent" : "default"}
-                />
-                <OverviewCard
-                  icon={Layers}
-                  label="Subtitles"
-                  value={`${subtitlesState.subtitles.length} blocks`}
-                  detail={`${selectedAyahCount} ayahs selected · ${activeRatioOption.label} ${activeRatioOption.hint}`}
-                />
-              </section>
-
-              <section className="studio-panel-soft px-4 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="section-kicker">Workflow</p>
-                    <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
-                      Move from source to final subtitle pass
-                    </h2>
-                    <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-                      The shell now prioritizes the real editing loop: import,
-                      detect, refine, style, then export.
-                    </p>
-                  </div>
-                  {appliedDetection && (
-                    <span className="metric-pill">
-                      Applied {appliedDetection.surahName}{" "}
-                      {appliedDetection.startAyah}
-                      {appliedDetection.endAyah !== appliedDetection.startAyah
-                        ? `-${appliedDetection.endAyah}`
-                        : ""}
-                    </span>
-                  )}
+              <section className="studio-panel-soft flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <span className="metric-pill">
+                    {hasMedia ? "Source Ready" : "No Source"}
+                  </span>
+                  <span className="metric-pill">
+                    {selectedAyahCount} selected
+                  </span>
+                  <span className="metric-pill">
+                    {subtitlesState.subtitles.length} blocks
+                  </span>
+                  <span className="metric-pill">{activeSubtitleStyle}</span>
                 </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {workflowSteps.map((step) => (
-                    <WorkflowChip
-                      key={step.id}
-                      icon={step.icon}
-                      label={step.label}
-                      detail={step.detail}
-                      state={step.state}
-                    />
-                  ))}
-                </div>
+                {appliedDetection && (
+                  <span className="metric-pill">
+                    {appliedDetection.surahName} {appliedDetection.startAyah}
+                    {appliedDetection.endAyah !== appliedDetection.startAyah
+                      ? `-${appliedDetection.endAyah}`
+                      : ""}
+                  </span>
+                )}
               </section>
 
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
@@ -1164,18 +1031,11 @@ export default function Home() {
                   <section className="studio-panel p-4">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
-                        <p className="section-kicker">Source Desk</p>
-                        <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
-                          Bring in footage, audio, and output intent
+                        <h2 className="text-base font-semibold text-[var(--text)]">
+                          Source
                         </h2>
-                        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-                          YouTube import, direct upload, clip-audio waveform,
-                          and aspect-ratio choices are all front-loaded here.
-                        </p>
                       </div>
-                      <span className="metric-pill">
-                        Auto-detect on upload
-                      </span>
+                      <span className="metric-pill">Auto-detect on upload</span>
                     </div>
 
                     <input
@@ -1197,7 +1057,7 @@ export default function Home() {
                       <div className="studio-panel-soft p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="section-kicker">Video Source</p>
+                            <p className="section-kicker">Video</p>
                             <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
                               {media.videoName
                                 ? media.videoName
@@ -1267,10 +1127,8 @@ export default function Home() {
                           </button>
                         </div>
 
-                        <p className="mt-3 text-xs leading-relaxed text-[var(--text-dim)]">
-                          Paste a single YouTube video URL and Ayah Studio will
-                          import it locally with `yt-dlp`. Limit:{" "}
-                          {MAX_YOUTUBE_IMPORT_MB} MB.
+                        <p className="mt-3 text-xs text-[var(--text-dim)]">
+                          Single YouTube URL. Limit: {MAX_YOUTUBE_IMPORT_MB} MB.
                         </p>
 
                         {(media.videoError || media.youtubeImportError) && (
@@ -1292,7 +1150,7 @@ export default function Home() {
                       <div className="studio-panel-soft p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="section-kicker">Audio Track</p>
+                            <p className="section-kicker">Audio</p>
                             <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
                               {media.audioSrc
                                 ? `Override track: ${media.audioName}`
@@ -1349,11 +1207,7 @@ export default function Home() {
                       </div>
 
                       <div className="studio-panel-soft p-4">
-                        <p className="section-kicker">Canvas Ratio</p>
-                        <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
-                          Pick the delivery format first so placement and safe
-                          zones stay honest while editing.
-                        </p>
+                        <p className="section-kicker">Format</p>
                         <div className="mt-4 grid grid-cols-3 gap-2">
                           {ASPECT_RATIO_OPTIONS.map(
                             ({ id, label, hint, icon: Icon }) => {
@@ -1391,14 +1245,9 @@ export default function Home() {
                   <section className="studio-panel p-4">
                     <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
                       <div>
-                        <p className="section-kicker">Preview Stage</p>
-                        <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
-                          Compose subtitles against the live frame
+                        <h2 className="text-base font-semibold text-[var(--text)]">
+                          Preview
                         </h2>
-                        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-                          Safe-zone guides, ratio-aware subtitle widths, and drag
-                          placement make the caption pass easier to trust.
-                        </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <span className="metric-pill">
@@ -1454,14 +1303,12 @@ export default function Home() {
                   <section className="studio-panel-soft p-4">
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
                       <div>
-                        <p className="section-kicker">Timeline</p>
-                        <h3 className="mt-2 text-base font-semibold text-[var(--text)]">
-                          Refine timing against the playhead
+                        <h3 className="text-base font-semibold text-[var(--text)]">
+                          Timeline
                         </h3>
                       </div>
-                      <p className="max-w-xs text-right text-xs leading-relaxed text-[var(--text-dim)]">
-                        Drag block edges for quick timing fixes or use the
-                        inspector buttons for exact playhead snapping.
+                      <p className="max-w-xs text-right text-xs text-[var(--text-dim)]">
+                        Drag edges or snap to playhead.
                       </p>
                     </div>
 
@@ -1484,19 +1331,16 @@ export default function Home() {
                   <section className="studio-panel p-4">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
-                        <p className="section-kicker">Ayah Detection</p>
-                        <h2 className="mt-2 text-lg font-semibold text-[var(--text)]">
-                          Detection runs in the background, but stays inspectable
+                        <h2 className="text-base font-semibold text-[var(--text)]">
+                          Ayah Detection
                         </h2>
-                        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                        <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
                           {detectionSourceLabel
                             ? `Ayah detection runs automatically on ${detectionSourceLabel}.`
                             : "Upload a reciter clip first and Ayah Studio will detect the ayah range from its audio track automatically."}
                         </p>
-                        <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
-                          Applies detected ranges across the real clip duration
-                          instead of falling back to a fixed seconds-per-ayah
-                          guess. Upload limit: {MAX_AYAH_DETECT_UPLOAD_MB} MB.
+                        <p className="mt-2 text-xs text-[var(--text-dim)]">
+                          Upload limit: {MAX_AYAH_DETECT_UPLOAD_MB} MB.
                         </p>
                       </div>
 
@@ -1673,9 +1517,8 @@ export default function Home() {
                     />
                   ) : (
                     <section className="studio-panel-soft px-5 py-6">
-                      <p className="section-kicker">Inspector</p>
-                      <h3 className="mt-2 text-base font-semibold text-[var(--text)]">
-                        Subtitle editor becomes active when you select a block
+                      <h3 className="text-base font-semibold text-[var(--text)]">
+                        Inspector
                       </h3>
                       <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
                         {subtitlesState.subtitles.length > 0
@@ -1684,26 +1527,6 @@ export default function Home() {
                       </p>
                     </section>
                   )}
-
-                  <section className="studio-panel-soft px-5 py-5">
-                    <p className="section-kicker">Readability Notes</p>
-                    <div className="mt-3 space-y-3 text-sm leading-relaxed text-[var(--text-muted)]">
-                      <p>
-                        Keep captions in the lower third by default, then move
-                        upward only when baked-in graphics or the reciter frame
-                        demand it.
-                      </p>
-                      <p>
-                        Split long ayahs aggressively on vertical formats so the
-                        Arabic stays readable without shrinking the type too far.
-                      </p>
-                      <p>
-                        Use high contrast and generous line spacing before adding
-                        more ornament. Clarity is the priority for recitation
-                        clips.
-                      </p>
-                    </div>
-                  </section>
                 </div>
               </div>
             </div>
@@ -1730,70 +1553,6 @@ export default function Home() {
 
 function getDetectionKey(match: AyahDetectionMatch): string {
   return `${match.surahNumber}:${match.startAyah}:${match.endAyah}`;
-}
-
-function OverviewCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "default",
-}: {
-  icon: typeof Upload;
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "default" | "accent";
-}) {
-  return (
-    <div className="studio-panel-soft flex items-start gap-3 px-4 py-4">
-      <div
-        className={[
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
-          tone === "accent"
-            ? "border-[var(--gold)]/35 bg-[var(--gold)]/12 text-[var(--gold-light)]"
-            : "border-[var(--border)] bg-black/10 text-[var(--text-muted)]",
-        ].join(" ")}
-      >
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="section-kicker">{label}</p>
-        <p className="mt-2 text-base font-semibold text-[var(--text)]">{value}</p>
-        <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-          {detail}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function WorkflowChip({
-  icon: Icon,
-  label,
-  detail,
-  state,
-}: {
-  icon: typeof Upload;
-  label: string;
-  detail: string;
-  state: "done" | "active" | "pending";
-}) {
-  return (
-    <div className="workflow-chip" data-state={state}>
-      <div className="workflow-chip-icon">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
-        <p className="font-mono-ui text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text)]">
-          {label}
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-          {detail}
-        </p>
-      </div>
-    </div>
-  );
 }
 
 function shouldAutoApplyDetection(
