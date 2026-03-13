@@ -14,7 +14,7 @@ import {
   getAyahRangeMetadata,
   hasLeadingAmeen,
   hasLeadingBasmala,
-  hasLeadingFatiha,
+  hasLikelyLeadingFatiha,
   hasLeadingIstiadha,
   ISTIADHA_DISPLAY_TEXT,
   ISTIADHA_MATCH_TEXTS,
@@ -697,7 +697,7 @@ function detectLeadingRecitationSegments(
     );
   }
 
-  if (hasLeadingFatiha(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha"))) {
+  if (hasLikelyLeadingFatiha(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha"))) {
     pushSegment(
       detectLeadingPhraseSegment({
         transcriptChunks: workingChunks,

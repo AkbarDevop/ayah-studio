@@ -405,6 +405,16 @@ export function hasLeadingFatiha(input: string) {
     normalizeArabicText(input);
 }
 
+export function hasLikelyLeadingFatiha(input: string) {
+  const normalized = normalizeArabicText(input);
+  if (!normalized) {
+    return false;
+  }
+
+  const prefix = normalized.split(" ").slice(0, 40).join(" ");
+  return scoreArabicTextSimilarity(prefix, FATIHA_MATCH_TEXT) >= 0.46;
+}
+
 export function hasLeadingAmeen(input: string) {
   return stripLeadingAmeen(normalizeArabicText(input)) !==
     normalizeArabicText(input);
