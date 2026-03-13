@@ -44,6 +44,7 @@ export interface AyahRangeMetadata {
 
 const DIACRITICS_REGEX = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u08D4-\u08FF]/g;
 const NON_ARABIC_REGEX = /[^ء-ي0-9\s]/g;
+const BASMALA_TEXT = "بسم الله الرحمن الرحيم";
 
 let quranCorpusPromise: Promise<NormalizedSurah[]> | null = null;
 
@@ -51,18 +52,18 @@ export async function detectAyahRangesFromTranscript(
   transcript: string,
   limit = 3
 ): Promise<AyahDetectionMatch[]> {
-  const normalizedTranscript = normalizeArabicText(transcript);
-  if (!normalizedTranscript) {
+  const transcriptVariants = buildMatchingTextVariants(transcript);
+  if (transcriptVariants.length === 0) {
     return [];
   }
 
-  const transcriptTokenCount = countWords(normalizedTranscript);
+  const transcriptTokenCount = Math.max(
+    ...transcriptVariants.map((variant) => variant.tokenCount)
+  );
   if (transcriptTokenCount < 2) {
     return [];
   }
 
-  const transcriptBigrams = buildBigrams(normalizedTranscript);
-  const transcriptTokens = new Set(normalizedTranscript.split(" "));
   const corpus = await loadQuranCorpus();
   const maxWindowSize = getMaxWindowSize(transcriptTokenCount);
 
@@ -85,20 +86,10 @@ export async function detectAyahRangesFromTranscript(
         combinedOriginal = joinText(combinedOriginal, ayah.text);
         combinedWordCount += ayah.wordCount;
 
-        const lengthRatio = ratio(
-          transcriptTokenCount,
-          Math.max(combinedWordCount, 1)
-        );
-
-        if (lengthRatio < 0.3) {
-          continue;
-        }
-
-        const score = scoreMatch(
-          normalizedTranscript,
+        const score = scoreCandidateAgainstTranscriptVariants(
+          transcriptVariants,
           combinedNormalized,
-          transcriptTokens,
-          transcriptBigrams
+          combinedWordCount
         );
 
         if (score < 0.38) {
@@ -149,19 +140,25 @@ export function normalizeArabicText(input: string): string {
 }
 
 export function scoreArabicTextSimilarity(left: string, right: string): number {
-  const normalizedLeft = normalizeArabicText(left);
-  const normalizedRight = normalizeArabicText(right);
+  const leftVariants = buildMatchingTextVariants(left);
+  const rightVariants = buildMatchingTextVariants(right);
+  let bestScore = 0;
 
-  if (!normalizedLeft || !normalizedRight) {
-    return 0;
+  for (const leftVariant of leftVariants) {
+    for (const rightVariant of rightVariants) {
+      bestScore = Math.max(
+        bestScore,
+        scoreMatch(
+          leftVariant.normalizedText,
+          rightVariant.normalizedText,
+          leftVariant.tokens,
+          leftVariant.bigrams
+        )
+      );
+    }
   }
 
-  return scoreMatch(
-    normalizedLeft,
-    normalizedRight,
-    new Set(normalizedLeft.split(" ")),
-    buildBigrams(normalizedLeft)
-  );
+  return bestScore;
 }
 
 export async function getAyahRangeMetadata(
@@ -259,6 +256,67 @@ function scoreMatch(
   return Math.min(1, Math.max(0, score));
 }
 
+function scoreCandidateAgainstTranscriptVariants(
+  transcriptVariants: MatchingTextVariant[],
+  candidateText: string,
+  candidateWordCount: number
+) {
+  let bestScore = 0;
+
+  for (const variant of transcriptVariants) {
+    const lengthRatio = ratio(variant.tokenCount, Math.max(candidateWordCount, 1));
+
+    if (lengthRatio < 0.3) {
+      continue;
+    }
+
+    bestScore = Math.max(
+      bestScore,
+      scoreMatch(
+        variant.normalizedText,
+        candidateText,
+        variant.tokens,
+        variant.bigrams
+      )
+    );
+  }
+
+  return bestScore;
+}
+
+function buildMatchingTextVariants(input: string): MatchingTextVariant[] {
+  const normalizedText = normalizeArabicText(input);
+  if (!normalizedText) {
+    return [];
+  }
+
+  const variants = [normalizedText];
+  const strippedBasmala = stripLeadingBasmala(normalizedText);
+
+  if (strippedBasmala && strippedBasmala !== normalizedText) {
+    variants.push(strippedBasmala);
+  }
+
+  return variants.map((variant) => ({
+    normalizedText: variant,
+    tokenCount: countWords(variant),
+    tokens: new Set(variant.split(" ")),
+    bigrams: buildBigrams(variant),
+  }));
+}
+
+function stripLeadingBasmala(input: string) {
+  if (input === BASMALA_TEXT) {
+    return "";
+  }
+
+  if (input.startsWith(`${BASMALA_TEXT} `)) {
+    return input.slice(BASMALA_TEXT.length).trim();
+  }
+
+  return input;
+}
+
 function buildBigrams(input: string): Set<string> {
   const compact = input.replace(/\s+/g, " ").trim();
   if (compact.length <= 2) {
@@ -330,6 +388,13 @@ function ratio(left: number, right: number): number {
   }
 
   return Math.min(left, right) / Math.max(left, right);
+}
+
+interface MatchingTextVariant {
+  normalizedText: string;
+  tokenCount: number;
+  tokens: Set<string>;
+  bigrams: Set<string>;
 }
 
 function joinText(left: string, right: string): string {
