@@ -160,6 +160,7 @@ function splitSubtitleIntoChunks(
         : start + totalDuration * durationRatio;
     const nextSubtitle: Subtitle = {
       ayahNum: subtitle.ayahNum,
+      label: subtitle.label,
       arabic: chunkWords.join(" "),
       translation: translationChunks[index] ?? "",
       start,

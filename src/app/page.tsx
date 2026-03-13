@@ -256,7 +256,7 @@ export default function Home() {
       const leadingSubtitle = match.leadingSegment
         ? {
             ayahNum: 0,
-            label: `${targetSurah.englishName} Basmala`,
+            label: "Basmala",
             arabic: match.leadingSegment.arabic,
             translation: await fetchBasmalaTranslation(
               quran.translationEdition
