@@ -15,24 +15,30 @@ export function buildSubtitlesFromAyahRange(
     clipDuration?: number;
     fallbackDuration: number;
     formatting?: SubtitleFormatting;
+    leadingSubtitle?: Subtitle;
   }
 ): Subtitle[] {
-  if (ayahRange.length === 0) {
-    return [];
-  }
-
   const formatting = options.formatting ?? DEFAULT_SUBTITLE_FORMATTING;
   const translationsByAyah = new Map(
     translations.map((translation) => [translation.numberInSurah, translation])
   );
+  const prefixSubtitles = options.leadingSubtitle
+    ? [{ ...options.leadingSubtitle, chunkIndex: 1, chunkCount: 1 }]
+    : [];
+
+  if (ayahRange.length === 0) {
+    return prefixSubtitles;
+  }
 
   if (options.detectedTimings?.length === ayahRange.length) {
     const timingByAyah = new Map(
       options.detectedTimings.map((timing) => [timing.ayahNum, timing])
     );
 
-    return expandSubtitlesForFormatting(
-      ayahRange.map((ayah, index) => {
+    return [
+      ...prefixSubtitles,
+      ...expandSubtitlesForFormatting(
+        ayahRange.map((ayah, index) => {
         const translation = translationsByAyah.get(ayah.numberInSurah);
         const timing = timingByAyah.get(ayah.numberInSurah);
 
@@ -45,7 +51,8 @@ export function buildSubtitlesFromAyahRange(
         };
       }),
       formatting
-    );
+      ),
+    ];
   }
 
   const clipDuration = options.clipDuration ?? 0;
@@ -57,8 +64,10 @@ export function buildSubtitlesFromAyahRange(
     const totalWeight = weights.reduce((sum, value) => sum + value, 0);
     let consumedWeight = 0;
 
-    return expandSubtitlesForFormatting(
-      ayahRange.map((ayah, index) => {
+    return [
+      ...prefixSubtitles,
+      ...expandSubtitlesForFormatting(
+        ayahRange.map((ayah, index) => {
         const translation = translationsByAyah.get(ayah.numberInSurah);
         const start = (consumedWeight / totalWeight) * clipDuration;
         consumedWeight += weights[index];
@@ -76,14 +85,17 @@ export function buildSubtitlesFromAyahRange(
         };
       }),
       formatting
-    );
+      ),
+    ];
   }
 
   let offset = 0;
   const gap = 0.5;
 
-  return expandSubtitlesForFormatting(
-    ayahRange.map((ayah) => {
+  return [
+    ...prefixSubtitles,
+    ...expandSubtitlesForFormatting(
+      ayahRange.map((ayah) => {
       const translation = translationsByAyah.get(ayah.numberInSurah);
       const subtitle: Subtitle = {
         ayahNum: ayah.numberInSurah,
@@ -97,7 +109,8 @@ export function buildSubtitlesFromAyahRange(
       return subtitle;
     }),
     formatting
-  );
+    ),
+  ];
 }
 
 function expandSubtitlesForFormatting(

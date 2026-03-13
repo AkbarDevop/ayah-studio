@@ -5,10 +5,14 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { NextResponse } from "next/server";
 import {
+  BASMALA_DISPLAY_TEXT,
+  BASMALA_MATCH_TEXT,
   detectAyahRangesFromTranscript,
   getAyahRangeMetadata,
+  hasLeadingBasmala,
   normalizeArabicText,
   scoreArabicTextSimilarity,
+  startsWithBasmala,
 } from "@/lib/ayah-detection";
 import {
   MAX_AYAH_DETECT_MULTIPART_OVERHEAD_BYTES,
@@ -94,6 +98,11 @@ export async function POST(request: Request) {
       chunks.length > 0
         ? chunks
         : await transcribeSpeechSegments(outputPath, clipDuration, silenceRanges, token);
+    const leadingBasmalaSegment = detectLeadingBasmalaSegment(
+      transcript,
+      transcriptChunks,
+      clipDuration
+    );
     const rawMatches = await detectAyahRangesFromTranscript(transcript, 3);
     const matches = await Promise.all(
       rawMatches.map((match) =>
@@ -101,7 +110,8 @@ export async function POST(request: Request) {
           match,
           clipDuration,
           silenceRanges,
-          transcriptChunks
+          transcriptChunks,
+          leadingBasmalaSegment
         )
       )
     );
@@ -155,7 +165,12 @@ async function enrichMatchWithTiming(
   match: AyahDetectionMatch,
   clipDuration: number,
   silenceRanges: SilenceRange[],
-  transcriptChunks: TranscriptChunk[]
+  transcriptChunks: TranscriptChunk[],
+  leadingBasmalaSegment: {
+    start: number;
+    end: number;
+    arabic: string;
+  } | null
 ): Promise<AyahDetectionMatch> {
   const range = await getAyahRangeMetadata(
     match.surahNumber,
@@ -166,6 +181,16 @@ async function enrichMatchWithTiming(
   if (!range || clipDuration <= 0) {
     return match;
   }
+
+  const includeLeadingBasmala =
+    leadingBasmalaSegment && !startsWithBasmala(range.ayahs[0].text)
+      ? {
+          kind: "basmala" as const,
+          arabic: leadingBasmalaSegment.arabic,
+          start: leadingBasmalaSegment.start,
+          end: Math.min(leadingBasmalaSegment.end, clipDuration),
+        }
+      : null;
 
   const chunkAlignedTimings = buildAyahTimingSegmentsFromTranscriptChunks(
     range.ayahs,
@@ -178,6 +203,15 @@ async function enrichMatchWithTiming(
       ...match,
       timings: chunkAlignedTimings,
       timingSource: "chunks",
+      leadingSegment: includeLeadingBasmala
+        ? {
+            ...includeLeadingBasmala,
+            end: Math.min(
+              includeLeadingBasmala.end,
+              chunkAlignedTimings[0]?.start ?? includeLeadingBasmala.end
+            ),
+          }
+        : undefined,
     };
   }
 
@@ -194,6 +228,15 @@ async function enrichMatchWithTiming(
     ...match,
     timings: timings.segments,
     timingSource: timings.source,
+    leadingSegment: includeLeadingBasmala
+      ? {
+          ...includeLeadingBasmala,
+          end: Math.min(
+            includeLeadingBasmala.end,
+            timings.segments[0]?.start ?? includeLeadingBasmala.end
+          ),
+        }
+      : undefined,
   };
 }
 
@@ -572,6 +615,59 @@ function normalizeChunkTimestamp(timestamp: unknown) {
   }
 
   return [start, end] as const;
+}
+
+function detectLeadingBasmalaSegment(
+  transcript: string,
+  transcriptChunks: TranscriptChunk[],
+  clipDuration: number
+) {
+  if (!hasLeadingBasmala(transcript) || clipDuration <= 0) {
+    return null;
+  }
+
+  if (transcriptChunks.length === 0) {
+    return {
+      arabic: BASMALA_DISPLAY_TEXT,
+      start: 0,
+      end: Math.min(clipDuration, 2.2),
+    };
+  }
+
+  let cumulativeText = "";
+  let cumulativeEnd = 0;
+  let best: { score: number; end: number; text: string } | null = null;
+
+  for (const chunk of transcriptChunks.slice(0, 3)) {
+    cumulativeText = `${cumulativeText} ${chunk.text}`.trim();
+    cumulativeEnd = chunk.end;
+    const score = scoreArabicTextSimilarity(cumulativeText, BASMALA_MATCH_TEXT);
+
+    if (!best || score > best.score) {
+      best = {
+        score,
+        end: cumulativeEnd,
+        text: cumulativeText,
+      };
+    }
+  }
+
+  if (!best) {
+    return null;
+  }
+
+  const basmalaWords = countWords(BASMALA_MATCH_TEXT);
+  const totalWords = Math.max(countWords(best.text), basmalaWords);
+  const estimatedEnd = Math.max(
+    0.6,
+    Math.min(best.end, best.end * (basmalaWords / totalWords))
+  );
+
+  return {
+    arabic: BASMALA_DISPLAY_TEXT,
+    start: 0,
+    end: Math.min(Math.max(estimatedEnd, 0.9), clipDuration),
+  };
 }
 
 async function runProcess(command: string, args: string[]) {

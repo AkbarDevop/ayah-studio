@@ -24,6 +24,8 @@ interface TranslationSurahData {
   ayahs: TranslationAyah[];
 }
 
+const basmalaTranslationCache = new Map<string, Promise<string>>();
+
 export async function fetchAllSurahs(): Promise<Surah[]> {
   const res = await fetch(`${QURAN_API}/surah`);
   const data: ApiResponse<Surah[]> = await res.json();
@@ -57,4 +59,24 @@ export async function fetchSurahWithTranslation(
     fetchSurahTranslation(surahNum, edition),
   ]);
   return { ayahs, translations };
+}
+
+export async function fetchBasmalaTranslation(edition: string): Promise<string> {
+  const cached = basmalaTranslationCache.get(edition);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = fetchSurahTranslation(1, edition)
+    .then((translations) => {
+      const basmala = translations.find((ayah) => ayah.numberInSurah === 1);
+      return basmala?.text ?? "";
+    })
+    .catch((error) => {
+      basmalaTranslationCache.delete(edition);
+      throw error;
+    });
+
+  basmalaTranslationCache.set(edition, promise);
+  return promise;
 }

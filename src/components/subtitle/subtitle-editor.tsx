@@ -40,7 +40,7 @@ export default function SubtitleEditor({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="font-mono-ui text-sm font-medium text-[var(--text)]">
-          Editing Ayah {subtitle.ayahNum}
+          Editing {subtitle.label ?? `Ayah ${subtitle.ayahNum}`}
           {subtitle.chunkCount && subtitle.chunkCount > 1
             ? ` · Part ${subtitle.chunkIndex ?? 1}/${subtitle.chunkCount}`
             : ""}

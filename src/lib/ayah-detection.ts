@@ -44,7 +44,8 @@ export interface AyahRangeMetadata {
 
 const DIACRITICS_REGEX = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u08D4-\u08FF]/g;
 const NON_ARABIC_REGEX = /[^ء-ي0-9\s]/g;
-const BASMALA_TEXT = "بسم الله الرحمن الرحيم";
+export const BASMALA_MATCH_TEXT = "بسم الله الرحمن الرحيم";
+export const BASMALA_DISPLAY_TEXT = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ";
 
 let quranCorpusPromise: Promise<NormalizedSurah[]> | null = null;
 
@@ -306,15 +307,28 @@ function buildMatchingTextVariants(input: string): MatchingTextVariant[] {
 }
 
 function stripLeadingBasmala(input: string) {
-  if (input === BASMALA_TEXT) {
+  if (input === BASMALA_MATCH_TEXT) {
     return "";
   }
 
-  if (input.startsWith(`${BASMALA_TEXT} `)) {
-    return input.slice(BASMALA_TEXT.length).trim();
+  if (input.startsWith(`${BASMALA_MATCH_TEXT} `)) {
+    return input.slice(BASMALA_MATCH_TEXT.length).trim();
   }
 
   return input;
+}
+
+export function hasLeadingBasmala(input: string) {
+  return stripLeadingBasmala(normalizeArabicText(input)) !==
+    normalizeArabicText(input);
+}
+
+export function startsWithBasmala(input: string) {
+  const normalized = normalizeArabicText(input);
+  return (
+    normalized === BASMALA_MATCH_TEXT ||
+    normalized.startsWith(`${BASMALA_MATCH_TEXT} `)
+  );
 }
 
 function buildBigrams(input: string): Set<string> {

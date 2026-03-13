@@ -59,6 +59,7 @@ export function useSubtitles(onResetPlayback: () => void) {
     options: {
       detectedTimings?: AyahTimingSegment[];
       clipDuration?: number;
+      leadingSubtitle?: Subtitle;
     }
   ) {
     const nextSubtitles = buildSubtitlesFromAyahRange(ayahRange, translations, {
@@ -66,6 +67,7 @@ export function useSubtitles(onResetPlayback: () => void) {
       clipDuration: options.clipDuration,
       fallbackDuration: defaultDuration,
       formatting: subtitleFormatting,
+      leadingSubtitle: options.leadingSubtitle,
     });
 
     applyGeneratedSubtitles(nextSubtitles);

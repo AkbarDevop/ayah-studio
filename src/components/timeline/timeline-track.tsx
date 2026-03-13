@@ -192,7 +192,7 @@ export default function TimelineTrack({
               </>
             )}
             <span className="truncate text-[10px] font-bold">
-              {sub.ayahNum}
+              {sub.label ?? sub.ayahNum}
             </span>
           </button>
         );

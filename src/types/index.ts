@@ -30,6 +30,7 @@ export interface TranslationAyah {
 
 export interface Subtitle {
   ayahNum: number;
+  label?: string;
   arabic: string;
   translation: string;
   start: number;
@@ -83,6 +84,13 @@ export interface AyahTimingSegment {
   end: number;
 }
 
+export interface LeadingRecitationSegment {
+  kind: "basmala";
+  arabic: string;
+  start: number;
+  end: number;
+}
+
 export interface AyahDetectionMatch {
   surahNumber: number;
   surahName: string;
@@ -93,6 +101,7 @@ export interface AyahDetectionMatch {
   matchedText: string;
   timings?: AyahTimingSegment[];
   timingSource?: "chunks" | "silence" | "hybrid" | "weighted";
+  leadingSegment?: LeadingRecitationSegment;
 }
 
 export interface AyahDetectionResult {

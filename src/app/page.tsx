@@ -27,7 +27,7 @@ import {
   TRANSLATION_FONT_OPTIONS,
 } from "@/lib/subtitle-formatting";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
-import { fetchAllSurahs } from "@/lib/quran-api";
+import { fetchAllSurahs, fetchBasmalaTranslation } from "@/lib/quran-api";
 import { useQuranData } from "@/hooks/useQuranData";
 import { useMediaState } from "@/hooks/useMediaState";
 import { usePlayback, useSimulationTimer } from "@/hooks/usePlayback";
@@ -252,10 +252,23 @@ export default function Home() {
       quran.setTranslations(content.translations);
       quran.setSelectedSurah(targetSurah);
       quran.setSelectedAyahIndices(rangeIndices);
+      const leadingSubtitle = match.leadingSegment
+        ? {
+            ayahNum: 0,
+            label: "Basmala",
+            arabic: match.leadingSegment.arabic,
+            translation: await fetchBasmalaTranslation(
+              quran.translationEdition
+            ).catch(() => ""),
+            start: match.leadingSegment.start,
+            end: match.leadingSegment.end,
+          }
+        : undefined;
       subtitlesState.applyDetectedSubtitles(rangeAyahs, content.translations, {
-          detectedTimings: match.timings,
-          clipDuration: detectedMediaDuration > 0 ? detectedMediaDuration : undefined,
-        });
+        detectedTimings: match.timings,
+        clipDuration: detectedMediaDuration > 0 ? detectedMediaDuration : undefined,
+        leadingSubtitle,
+      });
       detection.setAppliedDetectionKey(getDetectionKey(match));
     } catch (err) {
       detection.setDetectionError(
@@ -455,7 +468,7 @@ export default function Home() {
                         >
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-[var(--gold)] font-[family-name:var(--font-ibm-plex)]">
-                            Ayah {sub.ayahNum}
+                            {sub.label ?? `Ayah ${sub.ayahNum}`}
                             {sub.chunkCount && sub.chunkCount > 1
                               ? ` · ${sub.chunkIndex ?? 1}/${sub.chunkCount}`
                               : ""}
