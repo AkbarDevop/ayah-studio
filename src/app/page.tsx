@@ -137,6 +137,9 @@ export default function Home() {
     : null;
   const bestDetection = detection.detectionResult?.matches[0] ?? null;
   const nextBestDetection = detection.detectionResult?.matches[1] ?? null;
+  const appliedDetection = detection.detectionResult?.matches.find(
+    (match) => getDetectionKey(match) === detection.appliedDetectionKey
+  ) ?? null;
   const detectedMediaDuration = Math.max(
     media.audioDuration,
     media.videoDuration
@@ -225,7 +228,10 @@ export default function Home() {
     await detection.detectAyahs(detectionSourceFile);
   }
 
-  async function applyDetectedMatch(match: AyahDetectionMatch) {
+  async function applyDetectedMatch(
+    match: AyahDetectionMatch,
+    mode: "auto" | "manual" = "manual"
+  ) {
     try {
       detection.setDetectionError(null);
 
@@ -282,6 +288,7 @@ export default function Home() {
         clipDuration: detectedMediaDuration > 0 ? detectedMediaDuration : undefined,
         leadingSubtitle,
       });
+      detection.setAppliedDetectionMode(mode);
       detection.setAppliedDetectionKey(getDetectionKey(match));
     } catch (err) {
       detection.setDetectionError(
@@ -295,7 +302,7 @@ export default function Home() {
   });
 
   const runAutoApplyBestMatch = useEffectEvent(async (match: AyahDetectionMatch) => {
-    await applyDetectedMatch(match);
+    await applyDetectedMatch(match, "auto");
   });
 
   useEffect(() => {
@@ -1174,6 +1181,25 @@ export default function Home() {
               {detection.detectionError && (
                 <div className="mt-4 rounded-lg border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
                   {detection.detectionError}
+                </div>
+              )}
+
+              {appliedDetection && (
+                <div className="mt-4 rounded-lg border border-[var(--emerald)]/35 bg-[var(--emerald)]/10 px-4 py-3">
+                  <p className="text-sm font-semibold text-[var(--emerald-light)]">
+                    {detection.appliedDetectionMode === "auto"
+                      ? "Auto-detected and applied"
+                      : "Detected and applied"}
+                    : {appliedDetection.surahName} {appliedDetection.startAyah}
+                    {appliedDetection.endAyah !== appliedDetection.startAyah
+                      ? `-${appliedDetection.endAyah}`
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-dim)]">
+                    {detection.appliedDetectionMode === "auto"
+                      ? "Ayah Studio picked the top match automatically because the confidence was clearly stronger than the alternatives."
+                      : "You selected this detected range and Ayah Studio generated timed subtitles from it."}
+                  </p>
                 </div>
               )}
 

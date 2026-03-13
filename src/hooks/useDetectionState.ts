@@ -12,6 +12,9 @@ export function useDetectionState() {
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [detectionResult, setDetectionResult] =
     useState<AyahDetectionResult | null>(null);
+  const [appliedDetectionMode, setAppliedDetectionMode] = useState<
+    "auto" | "manual" | null
+  >(null);
   const [appliedDetectionKey, setAppliedDetectionKey] = useState<string | null>(
     null
   );
@@ -24,6 +27,7 @@ export function useDetectionState() {
 
     if (sourceFile.size > MAX_AYAH_DETECT_UPLOAD_BYTES) {
       setDetectionResult(null);
+      setAppliedDetectionMode(null);
       setAppliedDetectionKey(null);
       setDetectionError(getAyahDetectUploadLimitMessage());
       return null;
@@ -34,6 +38,7 @@ export function useDetectionState() {
 
     setDetectingAyahs(true);
     setDetectionError(null);
+    setAppliedDetectionMode(null);
     setAppliedDetectionKey(null);
 
     try {
@@ -70,6 +75,7 @@ export function useDetectionState() {
   function reset() {
     setDetectionError(null);
     setDetectionResult(null);
+    setAppliedDetectionMode(null);
     setAppliedDetectionKey(null);
   }
 
@@ -78,6 +84,8 @@ export function useDetectionState() {
     detectionError,
     setDetectionError,
     detectionResult,
+    appliedDetectionMode,
+    setAppliedDetectionMode,
     appliedDetectionKey,
     setAppliedDetectionKey,
     detectAyahs,
