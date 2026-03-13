@@ -7,6 +7,7 @@ import {
   Star,
   Download,
   Upload,
+  Link2,
   X,
   Monitor,
   Smartphone,
@@ -27,6 +28,7 @@ import {
   resolveSubtitleColors,
   TRANSLATION_FONT_OPTIONS,
 } from "@/lib/subtitle-formatting";
+import { MAX_YOUTUBE_IMPORT_MB } from "@/lib/youtube-import";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
 import { fetchAllSurahs, fetchBasmalaTranslation } from "@/lib/quran-api";
 import { useQuranData } from "@/hooks/useQuranData";
@@ -1017,7 +1019,42 @@ export default function Home() {
                   </span>
                 </div>
 
-                {(media.videoDuration > 0 || media.videoError) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <input
+                    type="url"
+                    value={media.youtubeUrl}
+                    onChange={(event) => media.setYoutubeUrl(event.target.value)}
+                    placeholder="Paste a YouTube link"
+                    className="min-w-[240px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void media.importFromYouTube();
+                    }}
+                    disabled={media.youtubeImporting}
+                    className={[
+                      "flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold transition-colors",
+                      media.youtubeImporting
+                        ? "cursor-wait bg-[var(--border)] text-[var(--text-dim)]"
+                        : "bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
+                    ].join(" ")}
+                  >
+                    <Link2 className="h-4 w-4" />
+                    <span>
+                      {media.youtubeImporting ? "Importing..." : "Import Link"}
+                    </span>
+                  </button>
+                </div>
+
+                <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
+                  Paste a single YouTube video URL and Ayah Studio will import it
+                  locally with `yt-dlp`. Limit: {MAX_YOUTUBE_IMPORT_MB} MB.
+                </p>
+
+                {(media.videoDuration > 0 ||
+                  media.videoError ||
+                  media.youtubeImportError) && (
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                     {media.videoDuration > 0 && (
                       <span className="font-mono-ui text-[var(--text-dim)]">
@@ -1027,6 +1064,11 @@ export default function Home() {
                     {media.videoError && (
                       <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
                         {media.videoError}
+                      </span>
+                    )}
+                    {media.youtubeImportError && (
+                      <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
+                        {media.youtubeImportError}
                       </span>
                     )}
                   </div>
