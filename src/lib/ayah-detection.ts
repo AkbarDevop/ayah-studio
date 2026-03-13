@@ -52,6 +52,8 @@ export const ISTIADHA_DISPLAY_TEXT =
   "أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ";
 export const BASMALA_MATCH_TEXT = "بسم الله الرحمن الرحيم";
 export const BASMALA_DISPLAY_TEXT = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ";
+export const AMEEN_MATCH_TEXT = "امين";
+export const AMEEN_DISPLAY_TEXT = "آمِين";
 export const FATIHA_MATCH_TEXT = normalizeArabicText(
   [
     "بسم الله الرحمن الرحيم",
@@ -320,6 +322,7 @@ function buildMatchingTextVariants(input: string): MatchingTextVariant[] {
     for (const next of [
       stripLeadingIstiadha(current),
       stripLeadingFatiha(current),
+      stripLeadingAmeen(current),
       stripLeadingBasmala(current),
     ]) {
       if (next && next !== current && !variants.has(next)) {
@@ -375,6 +378,18 @@ export function stripLeadingFatiha(input: string) {
   return input;
 }
 
+export function stripLeadingAmeen(input: string) {
+  if (input === AMEEN_MATCH_TEXT) {
+    return "";
+  }
+
+  if (input.startsWith(`${AMEEN_MATCH_TEXT} `)) {
+    return input.slice(AMEEN_MATCH_TEXT.length).trim();
+  }
+
+  return input;
+}
+
 export function hasLeadingIstiadha(input: string) {
   return stripLeadingIstiadha(normalizeArabicText(input)) !==
     normalizeArabicText(input);
@@ -387,6 +402,11 @@ export function hasLeadingBasmala(input: string) {
 
 export function hasLeadingFatiha(input: string) {
   return stripLeadingFatiha(normalizeArabicText(input)) !==
+    normalizeArabicText(input);
+}
+
+export function hasLeadingAmeen(input: string) {
+  return stripLeadingAmeen(normalizeArabicText(input)) !==
     normalizeArabicText(input);
 }
 
@@ -403,6 +423,13 @@ export function stripLeadingRecitationIntro(input: string) {
     }
 
     next = stripLeadingFatiha(current);
+    if (next !== current) {
+      current = next;
+      changed = true;
+      continue;
+    }
+
+    next = stripLeadingAmeen(current);
     if (next !== current) {
       current = next;
       changed = true;

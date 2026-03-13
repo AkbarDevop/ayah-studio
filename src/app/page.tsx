@@ -1504,6 +1504,18 @@ async function buildLeadingSubtitles(
       continue;
     }
 
+    if (segment.kind === "ameen") {
+      subtitles.push({
+        ayahNum: 0,
+        label: "Ameen",
+        arabic: segment.arabic ?? "",
+        translation: "",
+        start: segment.start,
+        end: segment.end,
+      });
+      continue;
+    }
+
     if (segment.kind === "fatiha") {
       const fatihaContent = await fetchSurahWithTranslation(1, translationEdition);
       subtitles.push(

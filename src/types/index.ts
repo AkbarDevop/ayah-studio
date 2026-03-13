@@ -85,7 +85,7 @@ export interface AyahTimingSegment {
 }
 
 export interface LeadingRecitationSegment {
-  kind: "istiadha" | "basmala" | "fatiha";
+  kind: "istiadha" | "basmala" | "fatiha" | "ameen";
   arabic?: string;
   start: number;
   end: number;

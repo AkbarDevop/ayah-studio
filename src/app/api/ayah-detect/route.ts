@@ -5,11 +5,14 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { NextResponse } from "next/server";
 import {
+  AMEEN_DISPLAY_TEXT,
+  AMEEN_MATCH_TEXT,
   BASMALA_DISPLAY_TEXT,
   BASMALA_MATCH_TEXT,
   detectAyahRangesFromTranscript,
   FATIHA_MATCH_TEXT,
   getAyahRangeMetadata,
+  hasLeadingAmeen,
   hasLeadingBasmala,
   hasLeadingFatiha,
   hasLeadingIstiadha,
@@ -191,7 +194,7 @@ async function enrichMatchWithTiming(
   silenceRanges: SilenceRange[],
   transcriptChunks: TranscriptChunk[],
   leadingSegments: Array<{
-    kind: "istiadha" | "basmala" | "fatiha";
+    kind: "istiadha" | "basmala" | "fatiha" | "ameen";
     arabic?: string;
     start: number;
     end: number;
@@ -641,7 +644,7 @@ function detectLeadingRecitationSegments(
 ) {
   if (clipDuration <= 0) {
     return [] as Array<{
-      kind: "istiadha" | "basmala" | "fatiha";
+      kind: "istiadha" | "basmala" | "fatiha" | "ameen";
       arabic?: string;
       start: number;
       end: number;
@@ -649,7 +652,7 @@ function detectLeadingRecitationSegments(
   }
 
   const leadingSegments: Array<{
-    kind: "istiadha" | "basmala" | "fatiha";
+    kind: "istiadha" | "basmala" | "fatiha" | "ameen";
     arabic?: string;
     start: number;
     end: number;
@@ -661,7 +664,7 @@ function detectLeadingRecitationSegments(
 
   const pushSegment = (
     segment: {
-      kind: "istiadha" | "basmala" | "fatiha";
+      kind: "istiadha" | "basmala" | "fatiha" | "ameen";
       arabic?: string;
       start: number;
       end: number;
@@ -725,7 +728,28 @@ function detectLeadingRecitationSegments(
 
   if (
     leadingSegments.some((segment) => segment.kind === "fatiha") &&
-    hasLeadingBasmala(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha", "fatiha"))
+    hasLeadingAmeen(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha", "fatiha"))
+  ) {
+    pushSegment(
+      detectLeadingPhraseSegment({
+        transcriptChunks: workingChunks,
+        clipDuration,
+        startOffset: currentStart,
+        kind: "ameen",
+        displayText: AMEEN_DISPLAY_TEXT,
+        matchTexts: [AMEEN_MATCH_TEXT],
+        fallbackDuration: 0.9,
+        maxChunks: 2,
+        minScore: 0.58,
+      })
+    );
+  }
+
+  if (
+    leadingSegments.some((segment) => segment.kind === "fatiha") &&
+    hasLeadingBasmala(
+      stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha", "fatiha", "ameen")
+    )
   ) {
     pushSegment(
       detectLeadingPhraseSegment({
@@ -748,7 +772,7 @@ function detectLeadingPhraseSegment(options: {
   transcriptChunks: TranscriptChunk[];
   clipDuration: number;
   startOffset: number;
-  kind: "istiadha" | "basmala" | "fatiha";
+  kind: "istiadha" | "basmala" | "fatiha" | "ameen";
   displayText?: string;
   matchTexts: string[];
   fallbackDuration: number;
@@ -853,7 +877,7 @@ function getLeadingTimingOffset(
 
 function selectLeadingSegmentsForMatch(
   leadingSegments: Array<{
-    kind: "istiadha" | "basmala" | "fatiha";
+    kind: "istiadha" | "basmala" | "fatiha" | "ameen";
     arabic?: string;
     start: number;
     end: number;
@@ -862,7 +886,12 @@ function selectLeadingSegmentsForMatch(
   firstAyahText: string
 ) {
   if (surahNumber === 1) {
-    return leadingSegments.filter((segment) => segment.kind !== "fatiha");
+    const fatihaIndex = leadingSegments.findIndex(
+      (segment) => segment.kind === "fatiha"
+    );
+    return fatihaIndex >= 0
+      ? leadingSegments.slice(0, fatihaIndex)
+      : leadingSegments;
   }
 
   return leadingSegments.filter(
@@ -873,7 +902,7 @@ function selectLeadingSegmentsForMatch(
 
 function clampLeadingSegmentsToFirstTiming(
   leadingSegments: Array<{
-    kind: "istiadha" | "basmala" | "fatiha";
+    kind: "istiadha" | "basmala" | "fatiha" | "ameen";
     arabic?: string;
     start: number;
     end: number;
@@ -904,7 +933,7 @@ function buildTranscriptFromChunks(transcriptChunks: TranscriptChunk[]) {
 
 function stripLeadingRecitationIntroPrefix(
   text: string,
-  ...segmentKinds: Array<"istiadha" | "fatiha" | "basmala">
+  ...segmentKinds: Array<"istiadha" | "fatiha" | "ameen" | "basmala">
 ) {
   let current = normalizeArabicText(text);
 
@@ -913,6 +942,8 @@ function stripLeadingRecitationIntroPrefix(
       current = stripSpecificLeadingText(current, ISTIADHA_MATCH_TEXTS);
     } else if (kind === "fatiha") {
       current = stripSpecificLeadingText(current, [FATIHA_MATCH_TEXT]);
+    } else if (kind === "ameen") {
+      current = stripSpecificLeadingText(current, [AMEEN_MATCH_TEXT]);
     } else {
       current = stripSpecificLeadingText(current, [BASMALA_MATCH_TEXT]);
     }
