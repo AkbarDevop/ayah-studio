@@ -183,7 +183,10 @@ export async function getAyahRangeMetadata(
 
 async function loadQuranCorpus(): Promise<NormalizedSurah[]> {
   if (!quranCorpusPromise) {
-    quranCorpusPromise = fetchQuranCorpus();
+    quranCorpusPromise = fetchQuranCorpus().catch((error) => {
+      quranCorpusPromise = null;
+      throw error;
+    });
   }
 
   return quranCorpusPromise;
