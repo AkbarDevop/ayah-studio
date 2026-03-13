@@ -89,6 +89,7 @@ export interface LeadingRecitationSegment {
   arabic?: string;
   start: number;
   end: number;
+  timings?: AyahTimingSegment[];
 }
 
 export interface AyahDetectionMatch {

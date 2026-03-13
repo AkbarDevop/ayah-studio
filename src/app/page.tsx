@@ -1524,8 +1524,9 @@ async function buildLeadingSubtitles(
           fatihaContent.translations,
           {
             surahLabel: "Al-Faatiha",
+            detectedTimings: segment.timings,
             clipDuration: Math.max(segment.end - segment.start, 0.1),
-            timeOffset: segment.start,
+            timeOffset: segment.timings?.length ? 0 : segment.start,
             fallbackDuration,
             formatting,
           }

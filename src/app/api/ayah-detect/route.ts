@@ -12,7 +12,6 @@ import {
   detectAyahRangesFromTranscript,
   FATIHA_MATCH_TEXT,
   getAyahRangeMetadata,
-  hasLeadingAmeen,
   hasLeadingBasmala,
   hasLikelyLeadingFatiha,
   hasLeadingIstiadha,
@@ -132,7 +131,8 @@ export async function POST(request: Request) {
           clipDuration,
           silenceRanges,
           transcriptChunks,
-          leadingSegments
+          leadingSegments,
+          transcript
         )
       )
     );
@@ -192,7 +192,8 @@ async function enrichMatchWithTiming(
     arabic?: string;
     start: number;
     end: number;
-  }>
+  }>,
+  transcript?: string
 ): Promise<AyahDetectionMatch> {
   const range = await getAyahRangeMetadata(
     match.surahNumber,
@@ -222,14 +223,20 @@ async function enrichMatchWithTiming(
   );
 
   if (chunkAlignedTimings) {
+    const leadingSegmentsWithTimings = await hydrateLeadingSegmentsForMatch(
+      includedLeadingSegments,
+      transcriptChunks,
+      silenceRanges,
+      chunkAlignedTimings[0]?.start,
+      clipDuration,
+      transcript
+    );
+
     return {
       ...match,
       timings: chunkAlignedTimings,
       timingSource: "chunks",
-      leadingSegments: clampLeadingSegmentsToFirstTiming(
-        includedLeadingSegments,
-        chunkAlignedTimings[0]?.start
-      ),
+      leadingSegments: leadingSegmentsWithTimings,
     };
   }
 
@@ -243,14 +250,20 @@ async function enrichMatchWithTiming(
     timingWindowStart
   );
 
+  const leadingSegmentsWithTimings = await hydrateLeadingSegmentsForMatch(
+    includedLeadingSegments,
+    transcriptChunks,
+    silenceRanges,
+    timings.segments[0]?.start,
+    clipDuration,
+    transcript
+  );
+
   return {
     ...match,
     timings: timings.segments,
     timingSource: timings.source,
-    leadingSegments: clampLeadingSegmentsToFirstTiming(
-      includedLeadingSegments,
-      timings.segments[0]?.start
-    ),
+    leadingSegments: leadingSegmentsWithTimings,
   };
 }
 
@@ -837,8 +850,7 @@ function detectLeadingRecitationSegments(
   }
 
   if (
-    leadingSegments.some((segment) => segment.kind === "fatiha") &&
-    hasLeadingAmeen(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha", "fatiha"))
+    leadingSegments.some((segment) => segment.kind === "fatiha")
   ) {
     pushSegment(
       detectLeadingPhraseSegment({
@@ -848,18 +860,17 @@ function detectLeadingRecitationSegments(
         kind: "ameen",
         displayText: AMEEN_DISPLAY_TEXT,
         matchTexts: [AMEEN_MATCH_TEXT],
-        fallbackDuration: 0.9,
-        maxChunks: 2,
-        minScore: 0.58,
+        fallbackDuration: 0.8,
+        maxChunks: 3,
+        minScore: 0.34,
+        maxDuration: 1.4,
+        maxWords: 3,
       })
     );
   }
 
   if (
-    leadingSegments.some((segment) => segment.kind === "fatiha") &&
-    hasLeadingBasmala(
-      stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha", "fatiha", "ameen")
-    )
+    leadingSegments.some((segment) => segment.kind === "fatiha")
   ) {
     pushSegment(
       detectLeadingPhraseSegment({
@@ -871,6 +882,8 @@ function detectLeadingRecitationSegments(
         matchTexts: [BASMALA_MATCH_TEXT],
         fallbackDuration: 2.2,
         maxChunks: 3,
+        minScore: 0.54,
+        maxDuration: 4.5,
       })
     );
   }
@@ -888,6 +901,8 @@ function detectLeadingPhraseSegment(options: {
   fallbackDuration: number;
   maxChunks: number;
   minScore?: number;
+  maxDuration?: number;
+  maxWords?: number;
 }) {
   const {
     transcriptChunks,
@@ -899,6 +914,8 @@ function detectLeadingPhraseSegment(options: {
     fallbackDuration,
     maxChunks,
     minScore = 0.62,
+    maxDuration,
+    maxWords,
   } = options;
 
   if (transcriptChunks.length === 0) {
@@ -924,6 +941,15 @@ function detectLeadingPhraseSegment(options: {
   for (const chunk of transcriptChunks.slice(0, maxChunks)) {
     cumulativeText = `${cumulativeText} ${chunk.text}`.trim();
     cumulativeEnd = chunk.end;
+    const cumulativeDuration = cumulativeEnd - startOffset;
+    const cumulativeWordCount = countWords(normalizeArabicText(cumulativeText));
+
+    if (
+      (typeof maxDuration === "number" && cumulativeDuration > maxDuration) ||
+      (typeof maxWords === "number" && cumulativeWordCount > maxWords)
+    ) {
+      break;
+    }
 
     for (const matchText of matchTexts) {
       const score = scoreArabicTextSimilarity(cumulativeText, matchText);
@@ -942,7 +968,7 @@ function detectLeadingPhraseSegment(options: {
     return null;
   }
 
-  const targetWords = countWords(best.matchText);
+  const targetWords = getLeadingTargetWordCount(kind, best.text, best.matchText);
   const totalWords = Math.max(countWords(best.text), targetWords);
   const estimatedEnd = Math.max(
     startOffset + 0.6,
@@ -958,6 +984,72 @@ function detectLeadingPhraseSegment(options: {
     start: startOffset,
     end: Math.min(estimatedEnd, clipDuration),
   };
+}
+
+function getLeadingTargetWordCount(
+  kind: "istiadha" | "basmala" | "fatiha" | "ameen",
+  cumulativeText: string,
+  matchText: string
+) {
+  const defaultWordCount = countWords(matchText);
+
+  if (kind !== "fatiha") {
+    return defaultWordCount;
+  }
+
+  const words = normalizeArabicText(cumulativeText).split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return defaultWordCount;
+  }
+
+  let targetWords = defaultWordCount;
+  const secondBasmalaIndex = findPhraseWordIndex(
+    words,
+    BASMALA_MATCH_TEXT.split(" "),
+    BASMALA_MATCH_TEXT.split(" ").length
+  );
+  const ameenIndex = findPhraseWordIndex(
+    words,
+    [AMEEN_MATCH_TEXT],
+    Math.max(1, defaultWordCount - 4)
+  );
+
+  if (secondBasmalaIndex > 0) {
+    targetWords = Math.min(targetWords, secondBasmalaIndex);
+  }
+
+  if (ameenIndex > 0) {
+    targetWords = Math.min(targetWords, ameenIndex);
+  }
+
+  return Math.max(1, targetWords);
+}
+
+function findPhraseWordIndex(
+  words: string[],
+  phraseWords: string[],
+  startIndex: number
+) {
+  if (phraseWords.length === 0) {
+    return -1;
+  }
+
+  for (let index = startIndex; index <= words.length - phraseWords.length; index += 1) {
+    let matched = true;
+
+    for (let phraseIndex = 0; phraseIndex < phraseWords.length; phraseIndex += 1) {
+      if (words[index + phraseIndex] !== phraseWords[phraseIndex]) {
+        matched = false;
+        break;
+      }
+    }
+
+    if (matched) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function mergeAyahMatches(
@@ -991,6 +1083,7 @@ function selectLeadingSegmentsForMatch(
     arabic?: string;
     start: number;
     end: number;
+    timings?: AyahTimingSegment[];
   }>,
   surahNumber: number,
   firstAyahText: string
@@ -1016,6 +1109,7 @@ function clampLeadingSegmentsToFirstTiming(
     arabic?: string;
     start: number;
     end: number;
+    timings?: AyahTimingSegment[];
   }>,
   firstTimingStart: number | undefined
 ) {
@@ -1035,6 +1129,240 @@ function clampLeadingSegmentsToFirstTiming(
           : segment.end,
     };
   });
+}
+
+async function hydrateLeadingSegmentsForMatch(
+  leadingSegments: Array<{
+    kind: "istiadha" | "basmala" | "fatiha" | "ameen";
+    arabic?: string;
+    start: number;
+    end: number;
+    timings?: AyahTimingSegment[];
+  }>,
+  transcriptChunks: TranscriptChunk[],
+  silenceRanges: SilenceRange[],
+  firstTimingStart: number | undefined,
+  clipDuration: number,
+  transcript?: string
+) {
+  const clampedLeadingSegments = clampLeadingSegmentsToFirstTiming(
+    leadingSegments,
+    firstTimingStart
+  );
+
+  if (!clampedLeadingSegments) {
+    return undefined;
+  }
+
+  const hydratedSegments = await Promise.all(
+    clampedLeadingSegments.map(async (segment) => {
+      const windowChunks = clipTranscriptChunksToWindow(
+        transcriptChunks,
+        segment.start,
+        segment.end
+      );
+      const snappedSegment = snapLeadingSegmentToSpeech(segment, windowChunks);
+
+      if (segment.kind !== "fatiha") {
+        return snappedSegment;
+      }
+
+      const fatihaRange = await getAyahRangeMetadata(1, 1, 7);
+      if (!fatihaRange) {
+        return snappedSegment;
+      }
+
+      const timings =
+        buildAyahTimingSegmentsFromTranscriptChunks(
+          fatihaRange.ayahs,
+          snappedSegment.end,
+          windowChunks,
+          snappedSegment.start
+        ) ??
+        buildAyahTimingSegments(
+          fatihaRange.ayahs.map((ayah) => ({
+            ayahNum: ayah.numberInSurah,
+            wordCount: ayah.wordCount,
+          })),
+          snappedSegment.end,
+          silenceRanges,
+          snappedSegment.start
+        ).segments;
+
+      return {
+        ...snappedSegment,
+        timings,
+      };
+    })
+  );
+
+  return injectSyntheticPostFatihaSegments(
+    hydratedSegments,
+    firstTimingStart,
+    clipDuration,
+    transcript
+  );
+}
+
+function clipTranscriptChunksToWindow(
+  transcriptChunks: TranscriptChunk[],
+  windowStart: number,
+  windowEnd: number
+) {
+  return transcriptChunks
+    .map((chunk) => ({
+      ...chunk,
+      start: Math.max(chunk.start, windowStart),
+      end: Math.min(chunk.end, windowEnd),
+    }))
+    .filter((chunk) => chunk.end > chunk.start);
+}
+
+function snapLeadingSegmentToSpeech(
+  segment: {
+    kind: "istiadha" | "basmala" | "fatiha" | "ameen";
+    arabic?: string;
+    start: number;
+    end: number;
+    timings?: AyahTimingSegment[];
+  },
+  transcriptChunks: TranscriptChunk[]
+) {
+  if (transcriptChunks.length === 0) {
+    return segment;
+  }
+
+  const speechStart = transcriptChunks[0].start;
+  const speechEnd = transcriptChunks[transcriptChunks.length - 1].end;
+
+  return {
+    ...segment,
+    start: Math.max(segment.start, speechStart),
+    end: Math.min(segment.end, speechEnd),
+  };
+}
+
+function injectSyntheticPostFatihaSegments(
+  leadingSegments: Array<{
+    kind: "istiadha" | "basmala" | "fatiha" | "ameen";
+    arabic?: string;
+    start: number;
+    end: number;
+    timings?: AyahTimingSegment[];
+  }>,
+  firstTimingStart: number | undefined,
+  clipDuration: number,
+  transcript?: string
+) {
+  if (!transcript || typeof firstTimingStart !== "number") {
+    return leadingSegments;
+  }
+
+  const fatihaIndex = leadingSegments.findIndex(
+    (segment) => segment.kind === "fatiha"
+  );
+  if (fatihaIndex < 0) {
+    return leadingSegments;
+  }
+
+  const fatihaSegment = leadingSegments[fatihaIndex];
+  const postFatihaCue = detectPostFatihaCue(transcript);
+  if (!postFatihaCue.hasAmeen && !postFatihaCue.hasBasmala) {
+    return leadingSegments;
+  }
+
+  const existingTrailingSegments = leadingSegments.slice(fatihaIndex + 1);
+  const hasExistingAmeen = existingTrailingSegments.some(
+    (segment) => segment.kind === "ameen"
+  );
+  const hasExistingBasmala = existingTrailingSegments.some(
+    (segment) => segment.kind === "basmala"
+  );
+
+  const syntheticSegments: Array<{
+    kind: "ameen" | "basmala";
+    arabic?: string;
+    start: number;
+    end: number;
+  }> = [];
+  let cursor = firstTimingStart;
+
+  if (postFatihaCue.hasBasmala && !hasExistingBasmala) {
+    const duration = 1.9;
+    syntheticSegments.unshift({
+      kind: "basmala",
+      arabic: BASMALA_DISPLAY_TEXT,
+      start: Math.max(fatihaSegment.start, cursor - duration),
+      end: cursor,
+    });
+    cursor = syntheticSegments[0].start - 0.08;
+  }
+
+  if (postFatihaCue.hasAmeen && !hasExistingAmeen) {
+    const duration = 0.72;
+    syntheticSegments.unshift({
+      kind: "ameen",
+      arabic: AMEEN_DISPLAY_TEXT,
+      start: Math.max(fatihaSegment.start, cursor - duration),
+      end: cursor,
+    });
+    cursor = syntheticSegments[0].start - 0.08;
+  }
+
+  if (syntheticSegments.length === 0) {
+    return leadingSegments;
+  }
+
+  const fatihaEnd = Math.max(
+    fatihaSegment.start,
+    syntheticSegments[0].start - 0.08
+  );
+  const nextFatihaTimings =
+    fatihaSegment.timings?.length
+      ? [
+          ...fatihaSegment.timings.slice(0, -1),
+          {
+            ...fatihaSegment.timings[fatihaSegment.timings.length - 1],
+            end: Math.max(
+              fatihaSegment.timings[fatihaSegment.timings.length - 1].start,
+              fatihaEnd
+            ),
+          },
+        ]
+      : fatihaSegment.timings;
+
+  return [
+    ...leadingSegments.slice(0, fatihaIndex),
+    {
+      ...fatihaSegment,
+      end: fatihaEnd,
+      timings: nextFatihaTimings,
+    },
+    ...syntheticSegments,
+    ...existingTrailingSegments,
+  ].filter((segment) => segment.end > segment.start);
+}
+
+function detectPostFatihaCue(transcript: string) {
+  const words = normalizeArabicText(transcript).split(/\s+/).filter(Boolean);
+  const basmalaWords = BASMALA_MATCH_TEXT.split(" ");
+  const secondBasmalaIndex = findPhraseWordIndex(
+    words,
+    basmalaWords,
+    basmalaWords.length
+  );
+  const ameenIndex = findPhraseWordIndex(
+    words,
+    [AMEEN_MATCH_TEXT],
+    Math.max(1, countWords(FATIHA_MATCH_TEXT) - 4)
+  );
+
+  return {
+    hasAmeen:
+      ameenIndex >= 0 &&
+      (secondBasmalaIndex < 0 || ameenIndex < secondBasmalaIndex),
+    hasBasmala: secondBasmalaIndex >= 0,
+  };
 }
 
 function buildTranscriptFromChunks(transcriptChunks: TranscriptChunk[]) {
@@ -1428,21 +1756,28 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
   }
 
   const boundaries = [effectiveStart];
+  const groups = partitions.map((partition) =>
+    getTranscriptChunkGroup(
+      usableChunks,
+      partition.startChunk,
+      partition.endChunk,
+      groupCache
+    )
+  );
+
+  const gapAwareSegments = buildSegmentsFromTranscriptGroups(
+    ayahs.map((ayah) => ayah.numberInSurah),
+    groups,
+    effectiveStart,
+    clipDuration
+  );
+
+  if (gapAwareSegments) {
+    return gapAwareSegments;
+  }
 
   for (let index = 0; index < partitions.length - 1; index += 1) {
-    const currentGroup = getTranscriptChunkGroup(
-      usableChunks,
-      partitions[index].startChunk,
-      partitions[index].endChunk,
-      groupCache
-    );
-    const nextGroup = getTranscriptChunkGroup(
-      usableChunks,
-      partitions[index + 1].startChunk,
-      partitions[index + 1].endChunk,
-      groupCache
-    );
-    boundaries.push((currentGroup.end + nextGroup.start) / 2);
+    boundaries.push((groups[index].end + groups[index + 1].start) / 2);
   }
 
   boundaries.push(clipDuration);
@@ -1700,6 +2035,54 @@ function buildSegmentsFromBoundaries(
     start: boundaries[index],
     end: boundaries[index + 1],
   }));
+}
+
+function buildSegmentsFromTranscriptGroups(
+  ayahNumbers: number[],
+  groups: Array<{ start: number; end: number }>,
+  startOffset: number,
+  clipDuration: number
+) {
+  if (groups.length !== ayahNumbers.length || groups.length === 0) {
+    return null;
+  }
+
+  const segments: AyahTimingSegment[] = [];
+  const edgePadding = 0.04;
+  const minDuration = 0.12;
+  let previousEnd = startOffset;
+
+  for (let index = 0; index < groups.length; index += 1) {
+    const group = groups[index];
+    const nextGroup = groups[index + 1];
+    const rawStart = Math.max(startOffset, group.start - edgePadding);
+    const rawEnd = Math.min(
+      clipDuration,
+      group.end + edgePadding,
+      nextGroup ? nextGroup.start - edgePadding : clipDuration
+    );
+
+    const start = Math.max(previousEnd, rawStart);
+    const end = Math.max(start + minDuration, rawEnd);
+
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end > clipDuration + 0.001) {
+      return null;
+    }
+
+    segments.push({
+      ayahNum: ayahNumbers[index],
+      start,
+      end: Math.min(end, clipDuration),
+    });
+    previousEnd = Math.min(end, clipDuration);
+  }
+
+  return segments.every((segment, index) =>
+    segment.end > segment.start &&
+    (index === 0 || segment.start >= segments[index - 1].end)
+  )
+    ? segments
+    : null;
 }
 
 function getWavDurationSeconds(audioBuffer: Buffer) {
