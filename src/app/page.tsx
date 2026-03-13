@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useEffectEvent, useRef } from "react";
 import {
   BookOpen,
   Layers,
@@ -127,7 +128,15 @@ export default function Home() {
     : media.videoFile
       ? media.videoName ?? media.videoFile.name
       : null;
+  const detectionSourceKey = detectionSourceFile
+    ? [
+        detectionSourceFile.name,
+        detectionSourceFile.size,
+        detectionSourceFile.lastModified,
+      ].join(":")
+    : null;
   const bestDetection = detection.detectionResult?.matches[0] ?? null;
+  const nextBestDetection = detection.detectionResult?.matches[1] ?? null;
   const detectedMediaDuration = Math.max(
     media.audioDuration,
     media.videoDuration
@@ -153,6 +162,8 @@ export default function Home() {
     subtitlesState.subtitleStyle,
     subtitlesState.subtitleFormatting
   );
+  const autoDetectedSourceKeyRef = useRef<string | null>(null);
+  const autoAppliedDetectionKeyRef = useRef<string | null>(null);
 
   /* ------------------------------------------------------------------ */
   /* Subtitle generation                                                 */
@@ -278,6 +289,65 @@ export default function Home() {
       );
     }
   }
+
+  const runAutoDetection = useEffectEvent(async (sourceFile: File) => {
+    await detection.detectAyahs(sourceFile);
+  });
+
+  const runAutoApplyBestMatch = useEffectEvent(async (match: AyahDetectionMatch) => {
+    await applyDetectedMatch(match);
+  });
+
+  useEffect(() => {
+    if (!detectionSourceFile || !detectionSourceKey) {
+      autoDetectedSourceKeyRef.current = null;
+      autoAppliedDetectionKeyRef.current = null;
+      return;
+    }
+
+    if (detection.detectingAyahs) {
+      return;
+    }
+
+    if (autoDetectedSourceKeyRef.current === detectionSourceKey) {
+      return;
+    }
+
+    autoDetectedSourceKeyRef.current = detectionSourceKey;
+    autoAppliedDetectionKeyRef.current = null;
+    void runAutoDetection(detectionSourceFile);
+  }, [detectionSourceFile, detectionSourceKey, detection.detectingAyahs]);
+
+  useEffect(() => {
+    if (
+      !bestDetection ||
+      !detectionSourceKey ||
+      detection.detectingAyahs ||
+      !shouldAutoApplyDetection(bestDetection, nextBestDetection)
+    ) {
+      return;
+    }
+
+    const matchKey = getDetectionKey(bestDetection);
+    const autoApplyKey = `${detectionSourceKey}:${matchKey}`;
+
+    if (
+      autoAppliedDetectionKeyRef.current === autoApplyKey ||
+      detection.appliedDetectionKey === matchKey
+    ) {
+      autoAppliedDetectionKeyRef.current = autoApplyKey;
+      return;
+    }
+
+    autoAppliedDetectionKeyRef.current = autoApplyKey;
+    void runAutoApplyBestMatch(bestDetection);
+  }, [
+    bestDetection,
+    nextBestDetection,
+    detectionSourceKey,
+    detection.detectingAyahs,
+    detection.appliedDetectionKey,
+  ]);
 
   /* ------------------------------------------------------------------ */
   /* Sidebar tab config                                                  */
@@ -1056,8 +1126,8 @@ export default function Home() {
                   </p>
                   <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
                     {detectionSourceLabel
-                      ? `Run Quran-aware ayah detection on ${detectionSourceLabel}.`
-                      : "Upload a reciter clip first, then detect the ayah range from its audio track."}
+                      ? `Ayah detection runs automatically on ${detectionSourceLabel}.`
+                      : "Upload a reciter clip first and Ayah Studio will detect the ayah range from its audio track automatically."}
                   </p>
                   <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
                     Uses local ffmpeg extraction plus the Tarteel Whisper Quran model
@@ -1087,7 +1157,7 @@ export default function Home() {
                 >
                   <Sparkles className="h-4 w-4" />
                   <span>
-                    {detection.detectingAyahs ? "Detecting..." : "Detect Ayah Range"}
+                    {detection.detectingAyahs ? "Detecting..." : "Re-run Detection"}
                   </span>
                 </button>
               </div>
@@ -1312,6 +1382,21 @@ export default function Home() {
 
 function getDetectionKey(match: AyahDetectionMatch): string {
   return `${match.surahNumber}:${match.startAyah}:${match.endAyah}`;
+}
+
+function shouldAutoApplyDetection(
+  bestMatch: AyahDetectionMatch,
+  nextBestMatch: AyahDetectionMatch | null
+) {
+  if (bestMatch.score < 0.72) {
+    return false;
+  }
+
+  if (!nextBestMatch) {
+    return true;
+  }
+
+  return bestMatch.score - nextBestMatch.score >= 0.08;
 }
 
 function getTimingSourceLabel(source: NonNullable<AyahDetectionMatch["timingSource"]>) {
