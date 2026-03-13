@@ -37,6 +37,9 @@ const HUGGINGFACE_ASR_MODELS = [
   "tarteel-ai/whisper-base-ar-quran",
   "openai/whisper-large-v3",
 ] as const;
+const LOCAL_MLX_WHISPER_MODEL =
+  process.env.LOCAL_WHISPER_MODEL ?? "mlx-community/whisper-large-v3-turbo-q4";
+const UV_PATH = process.env.UV_PATH ?? "uv";
 const SILENCE_FILTER = "silencedetect=noise=-18dB:d=0.08";
 const SILENCE_EDGE_PADDING_SECONDS = 0.35;
 const MIN_SPEECH_SEGMENT_SECONDS = 0.55;
@@ -74,16 +77,6 @@ export async function POST(request: Request) {
 
   const token = await resolveHuggingFaceToken();
 
-  if (!token) {
-    return NextResponse.json(
-      {
-        error:
-          "Ayah detection needs a Hugging Face token. Set HF_TOKEN/HUGGINGFACE_API_KEY or run `hf auth login`, then restart Ayah Studio.",
-      },
-      { status: 503 }
-    );
-  }
-
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "ayah-detect-"));
   const inputPath = path.join(
     tempDir,
@@ -99,8 +92,9 @@ export async function POST(request: Request) {
     const audioBuffer = await fs.readFile(outputPath);
     const clipDuration = getWavDurationSeconds(audioBuffer);
     const silenceRanges = await detectSilenceRanges(outputPath);
-    const { transcript, model, chunks } = await transcribeWithHuggingFace(
+    const { transcript, provider, chunks } = await transcribeAudio(
       audioBuffer,
+      outputPath,
       token
     );
     const transcriptChunks =
@@ -145,7 +139,7 @@ export async function POST(request: Request) {
 
     if (matches.length === 0) {
       return NextResponse.json({
-        provider: `huggingface:${model}`,
+        provider,
         transcript,
         matches: [],
         warning:
@@ -154,7 +148,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      provider: `huggingface:${model}`,
+      provider,
       transcript,
       matches,
     });
@@ -280,6 +274,58 @@ async function transcribeWithHuggingFace(audioBuffer: Buffer, token: string) {
     lastError ??
     new Error("No hosted Hugging Face ASR model could transcribe the clip.")
   );
+}
+
+async function transcribeAudio(
+  audioBuffer: Buffer,
+  audioPath: string,
+  token: string | null
+) {
+  let huggingFaceError: Error | null = null;
+
+  if (token) {
+    try {
+      const { transcript, model, chunks } = await transcribeWithHuggingFace(
+        audioBuffer,
+        token
+      );
+
+      return {
+        transcript,
+        chunks,
+        provider: `huggingface:${model}`,
+      };
+    } catch (error) {
+      huggingFaceError =
+        error instanceof Error ? error : new Error(String(error));
+
+      if (!shouldFallbackToLocalWhisper(huggingFaceError)) {
+        throw huggingFaceError;
+      }
+    }
+  }
+
+  try {
+    const localResult = await transcribeLocallyWithMlxWhisper(audioPath);
+    return {
+      transcript: localResult.transcript,
+      chunks: localResult.chunks,
+      provider: `local:${LOCAL_MLX_WHISPER_MODEL}`,
+    };
+  } catch (localError) {
+    const localMessage =
+      localError instanceof Error ? localError.message : String(localError);
+
+    if (huggingFaceError) {
+      throw new Error(
+        `${huggingFaceError.message} Local fallback also failed: ${localMessage}`
+      );
+    }
+
+    throw new Error(
+      `Ayah detection needs either a working Hugging Face ASR token or local MLX Whisper support. Local fallback failed: ${localMessage}`
+    );
+  }
 }
 
 async function transcribeWithModel(
@@ -411,7 +457,7 @@ async function transcribeSpeechSegments(
   audioPath: string,
   clipDuration: number,
   silenceRanges: SilenceRange[],
-  token: string
+  token: string | null
 ) {
   const speechSegments = buildSpeechSegments(clipDuration, silenceRanges);
 
@@ -427,7 +473,7 @@ async function transcribeSpeechSegments(
     try {
       await extractAudioSegment(audioPath, chunkPath, segment.start, segment.end);
       const audioBuffer = await fs.readFile(chunkPath);
-      const { transcript } = await transcribeWithHuggingFace(audioBuffer, token);
+      const { transcript } = await transcribeAudio(audioBuffer, chunkPath, token);
 
       if (transcript.trim()) {
         transcriptChunks.push({
@@ -442,6 +488,61 @@ async function transcribeSpeechSegments(
   }
 
   return transcriptChunks;
+}
+
+async function transcribeLocallyWithMlxWhisper(audioPath: string) {
+  const scriptPath = path.join(
+    process.cwd(),
+    "scripts",
+    "mlx_whisper_transcribe.py"
+  );
+
+  const stdout = await runProcessWithOutput(UV_PATH, [
+    "run",
+    "--python",
+    "3.12",
+    "--with",
+    "mlx-whisper==0.4.3",
+    "python",
+    scriptPath,
+    audioPath,
+    LOCAL_MLX_WHISPER_MODEL,
+  ]);
+
+  const payload = JSON.parse(stdout) as {
+    text?: string;
+    segments?: Array<{
+      text?: string;
+      start?: number;
+      end?: number;
+    }>;
+  };
+  const transcript = payload.text?.trim() ?? "";
+
+  if (!transcript) {
+    throw new Error("Local MLX Whisper returned no transcript text.");
+  }
+
+  const chunks = Array.isArray(payload.segments)
+    ? payload.segments
+        .map((segment) => ({
+          text: segment.text?.trim() ?? "",
+          start: Number(segment.start),
+          end: Number(segment.end),
+        }))
+        .filter(
+          (segment) =>
+            segment.text &&
+            Number.isFinite(segment.start) &&
+            Number.isFinite(segment.end) &&
+            segment.end > segment.start
+        )
+    : [];
+
+  return {
+    transcript,
+    chunks,
+  };
 }
 
 async function extractAudioSegment(
@@ -473,6 +574,15 @@ function isMissingHostedModelError(error: Error) {
     error.message.includes(" 404 ") ||
     error.message.includes("404 Not Found") ||
     error.message.endsWith(" Not Found")
+  );
+}
+
+function shouldFallbackToLocalWhisper(error: Error) {
+  return (
+    error.message.includes(" 402 ") ||
+    error.message.includes("depleted your monthly included credits") ||
+    error.message.includes("billing") ||
+    isMissingHostedModelError(error)
   );
 }
 
@@ -985,6 +1095,43 @@ async function runProcess(command: string, args: string[]) {
     child.on("close", (code) => {
       if (code === 0) {
         resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          stderr.trim() ||
+            `${path.basename(command)} exited with code ${String(code)}`
+        )
+      );
+    });
+  });
+}
+
+async function runProcessWithOutput(command: string, args: string[]) {
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout);
         return;
       }
 
