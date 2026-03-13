@@ -161,7 +161,8 @@ export default function Home() {
     subtitlesState.generateSubtitles(
       quran.ayahs,
       quran.translations,
-      quran.selectedAyahIndices
+      quran.selectedAyahIndices,
+      quran.selectedSurah?.englishName
     );
   }
 
@@ -255,7 +256,7 @@ export default function Home() {
       const leadingSubtitle = match.leadingSegment
         ? {
             ayahNum: 0,
-            label: "Basmala",
+            label: `${targetSurah.englishName} Basmala`,
             arabic: match.leadingSegment.arabic,
             translation: await fetchBasmalaTranslation(
               quran.translationEdition
@@ -265,6 +266,7 @@ export default function Home() {
           }
         : undefined;
       subtitlesState.applyDetectedSubtitles(rangeAyahs, content.translations, {
+        surahLabel: targetSurah.englishName,
         detectedTimings: match.timings,
         clipDuration: detectedMediaDuration > 0 ? detectedMediaDuration : undefined,
         leadingSubtitle,

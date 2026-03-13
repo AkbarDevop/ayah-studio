@@ -38,13 +38,15 @@ export function useSubtitles(onResetPlayback: () => void) {
   function generateSubtitles(
     ayahs: Ayah[],
     translations: TranslationAyah[],
-    selectedAyahIndices: Set<number>
+    selectedAyahIndices: Set<number>,
+    surahLabel?: string
   ) {
     const sorted = Array.from(selectedAyahIndices).sort((a, b) => a - b);
     const nextSubtitles = buildSubtitlesFromAyahRange(
       sorted.map((index) => ayahs[index]).filter(Boolean),
       translations,
       {
+        surahLabel,
         fallbackDuration: defaultDuration,
         formatting: subtitleFormatting,
       }
@@ -57,12 +59,14 @@ export function useSubtitles(onResetPlayback: () => void) {
     ayahRange: Ayah[],
     translations: TranslationAyah[],
     options: {
+      surahLabel?: string;
       detectedTimings?: AyahTimingSegment[];
       clipDuration?: number;
       leadingSubtitle?: Subtitle;
     }
   ) {
     const nextSubtitles = buildSubtitlesFromAyahRange(ayahRange, translations, {
+      surahLabel: options.surahLabel,
       detectedTimings: options.detectedTimings,
       clipDuration: options.clipDuration,
       fallbackDuration: defaultDuration,

@@ -11,6 +11,7 @@ export function buildSubtitlesFromAyahRange(
   ayahRange: Ayah[],
   translations: TranslationAyah[],
   options: {
+    surahLabel?: string;
     detectedTimings?: AyahTimingSegment[];
     clipDuration?: number;
     fallbackDuration: number;
@@ -44,6 +45,7 @@ export function buildSubtitlesFromAyahRange(
 
         return {
           ayahNum: ayah.numberInSurah,
+          label: formatAyahLabel(options.surahLabel, ayah.numberInSurah),
           arabic: ayah.text,
           translation: translation?.text ?? "",
           start: timing?.start ?? 0,
@@ -78,6 +80,7 @@ export function buildSubtitlesFromAyahRange(
 
         return {
           ayahNum: ayah.numberInSurah,
+          label: formatAyahLabel(options.surahLabel, ayah.numberInSurah),
           arabic: ayah.text,
           translation: translation?.text ?? "",
           start,
@@ -99,6 +102,7 @@ export function buildSubtitlesFromAyahRange(
       const translation = translationsByAyah.get(ayah.numberInSurah);
       const subtitle: Subtitle = {
         ayahNum: ayah.numberInSurah,
+        label: formatAyahLabel(options.surahLabel, ayah.numberInSurah),
         arabic: ayah.text,
         translation: translation?.text ?? "",
         start: offset,
@@ -252,6 +256,10 @@ function splitTranslationIntoAlignedChunks(
 
 function countTimingUnits(text: string): number {
   return tokenizeWords(text).length;
+}
+
+function formatAyahLabel(surahLabel: string | undefined, ayahNumber: number) {
+  return surahLabel ? `${surahLabel} ${ayahNumber}` : `Ayah ${ayahNumber}`;
 }
 
 function tokenizeWords(text: string) {
