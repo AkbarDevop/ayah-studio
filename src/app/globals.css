@@ -47,21 +47,32 @@ body {
 }
 
 .preview-stage {
+  position: relative;
   width: 100%;
+  margin-inline: auto;
 }
 
 .preview-stage[data-preview-ratio="landscape"] {
   aspect-ratio: 16 / 9;
+  max-width: min(100%, 72rem);
 }
 
 .preview-stage[data-preview-ratio="portrait"] {
   aspect-ratio: 9 / 16;
-  max-width: min(100%, 34vh);
+  max-width: min(100%, 22rem);
 }
 
 .preview-stage[data-preview-ratio="square"] {
   aspect-ratio: 1 / 1;
-  max-width: min(100%, 62vh);
+  max-width: min(100%, 35rem);
+}
+
+.preview-stage-frame {
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: #080b10;
+  isolation: isolate;
 }
 
 .glass-overlay {

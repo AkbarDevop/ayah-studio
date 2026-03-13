@@ -17,18 +17,24 @@ import {
   Monitor,
   Smartphone,
   Square,
+  Sparkles,
 } from "lucide-react";
 import type {
   Surah,
   Ayah,
   TranslationAyah,
   Subtitle,
+  AyahDetectionMatch,
+  AyahDetectionResult,
+  AyahTimingSegment,
   SubtitlePlacement,
   SidebarTab,
   AspectRatioPreset,
+  PlaybackMode,
 } from "@/types";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
 import { fetchAllSurahs, fetchSurahWithTranslation } from "@/lib/quran-api";
+import AudioWaveform from "@/components/audio/audio-waveform";
 import SurahBrowser from "@/components/editor/surah-browser";
 import AyahSelector from "@/components/editor/ayah-selector";
 import VideoPreview from "@/components/preview/video-preview";
@@ -112,9 +118,22 @@ export default function Home() {
   const [defaultDuration, setDefaultDuration] = useState(8);
   const [tab, setTab] = useState<SidebarTab>("browse");
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoName, setVideoName] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioName, setAudioName] = useState<string | null>(null);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [detectingAyahs, setDetectingAyahs] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
+  const [detectionResult, setDetectionResult] =
+    useState<AyahDetectionResult | null>(null);
+  const [appliedDetectionKey, setAppliedDetectionKey] = useState<string | null>(
+    null
+  );
   const [aspectRatio, setAspectRatio] =
     useState<AspectRatioPreset>("landscape");
   const [subtitlePlacement, setSubtitlePlacement] = useState<SubtitlePlacement>(
@@ -123,15 +142,33 @@ export default function Home() {
 
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   /* ------------------------------------------------------------------ */
   /* Derived                                                             */
   /* ------------------------------------------------------------------ */
   const subtitleDuration =
     subtitles.length > 0 ? Math.max(...subtitles.map((s) => s.end)) + 2 : 0;
+  const activeAudioSrc = audioSrc ?? videoSrc;
+  const activeAudioName = audioSrc ? audioName : videoName;
+  const usingClipAudio = Boolean(videoSrc) && !audioSrc;
+  const detectionSourceFile = audioFile ?? videoFile;
+  const detectionSourceLabel = audioFile
+    ? audioName ?? audioFile.name
+    : videoFile
+      ? videoName ?? videoFile.name
+      : null;
+  const bestDetection = detectionResult?.matches[0] ?? null;
+  const detectedMediaDuration = Math.max(audioDuration, videoDuration);
+  const playbackMode: PlaybackMode =
+    activeAudioSrc && !audioError
+      ? "audio"
+      : videoSrc
+        ? "video"
+        : "simulation";
   const totalDuration =
-    videoDuration > 0
-      ? Math.max(videoDuration, subtitleDuration)
+    audioDuration > 0 || videoDuration > 0
+      ? Math.max(audioDuration, videoDuration, subtitleDuration)
       : subtitleDuration > 0
         ? subtitleDuration
         : 60;
@@ -146,6 +183,14 @@ export default function Home() {
     };
   }, [videoSrc]);
 
+  useEffect(() => {
+    return () => {
+      if (audioSrc?.startsWith("blob:")) {
+        URL.revokeObjectURL(audioSrc);
+      }
+    };
+  }, [audioSrc]);
+
   /* ------------------------------------------------------------------ */
   /* Data fetching                                                       */
   /* ------------------------------------------------------------------ */
@@ -155,15 +200,18 @@ export default function Home() {
       .catch((err) => setError(err.message));
   }, []);
 
+  const fetchSurahContent = useCallback(
+    (surah: Surah) =>
+      fetchSurahWithTranslation(surah.number, translationEdition),
+    [translationEdition]
+  );
+
   const loadSurah = useCallback(
     async (surah: Surah) => {
       setLoading(true);
       setError(null);
       try {
-        const { ayahs: a, translations: t } = await fetchSurahWithTranslation(
-          surah.number,
-          translationEdition
-        );
+        const { ayahs: a, translations: t } = await fetchSurahContent(surah);
         setAyahs(a);
         setTranslations(t);
         setSelectedSurah(surah);
@@ -174,7 +222,7 @@ export default function Home() {
         setLoading(false);
       }
     },
-    [translationEdition]
+    [fetchSurahContent]
   );
 
   /* Refetch translation when edition changes */
@@ -182,7 +230,7 @@ export default function Home() {
     if (!selectedSurah) return;
     let cancelled = false;
     setLoading(true);
-    fetchSurahWithTranslation(selectedSurah.number, translationEdition)
+    fetchSurahContent(selectedSurah)
       .then(({ ayahs: a, translations: t }) => {
         if (cancelled) return;
         setAyahs(a);
@@ -197,30 +245,20 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [translationEdition, selectedSurah]);
+  }, [fetchSurahContent, selectedSurah]);
 
   /* ------------------------------------------------------------------ */
   /* Subtitle generation                                                 */
   /* ------------------------------------------------------------------ */
   function generateSubtitles() {
     const sorted = Array.from(selectedAyahIndices).sort((a, b) => a - b);
-    let offset = 0;
-    const gap = 0.5;
-    const newSubs: Subtitle[] = sorted.map((idx) => {
-      const ayah = ayahs[idx];
-      const trans = translations.find(
-        (t) => t.numberInSurah === ayah.numberInSurah
-      );
-      const sub: Subtitle = {
-        ayahNum: ayah.numberInSurah,
-        arabic: ayah.text,
-        translation: trans?.text ?? "",
-        start: offset,
-        end: offset + defaultDuration,
-      };
-      offset += defaultDuration + gap;
-      return sub;
-    });
+    const newSubs = buildSubtitlesFromAyahRange(
+      sorted.map((idx) => ayahs[idx]).filter(Boolean),
+      translations,
+      {
+        fallbackDuration: defaultDuration,
+      }
+    );
     setSubtitles(newSubs);
     setSelectedSubIdx(null);
     setCurrentTime(0);
@@ -232,7 +270,7 @@ export default function Home() {
   /* Playback simulation                                                 */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
-    if (videoSrc) {
+    if (playbackMode !== "simulation") {
       if (playIntervalRef.current) {
         clearInterval(playIntervalRef.current);
         playIntervalRef.current = null;
@@ -260,10 +298,10 @@ export default function Home() {
         clearInterval(playIntervalRef.current);
       }
     };
-  }, [playing, totalDuration, videoSrc]);
+  }, [playbackMode, playing, totalDuration]);
 
   function togglePlayPause() {
-    if (!videoSrc && subtitles.length === 0) return;
+    if (!activeAudioSrc && !videoSrc && subtitles.length === 0) return;
     setPlaying((prev) => !prev);
   }
 
@@ -278,11 +316,47 @@ export default function Home() {
     }
 
     setVideoError(null);
+    setDetectionError(null);
+    setDetectionResult(null);
+    setAppliedDetectionKey(null);
     setPlaying(false);
     setCurrentTime(0);
     setVideoDuration(0);
+    if (!audioSrc) {
+      setAudioDuration(0);
+      setAudioError(null);
+    }
+    setVideoFile(file);
     setVideoName(file.name);
     setVideoSrc(URL.createObjectURL(file));
+    event.target.value = "";
+  }
+
+  function handleAudioUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const isAudioFile =
+      file.type.startsWith("audio/") ||
+      file.type.startsWith("video/") ||
+      /\.(mp3|wav|m4a|aac|ogg|webm)$/i.test(file.name);
+
+    if (!isAudioFile) {
+      setAudioError("Please choose a valid audio file.");
+      event.target.value = "";
+      return;
+    }
+
+    setAudioError(null);
+    setDetectionError(null);
+    setDetectionResult(null);
+    setAppliedDetectionKey(null);
+    setPlaying(false);
+    setCurrentTime(0);
+    setAudioDuration(0);
+    setAudioFile(file);
+    setAudioName(file.name);
+    setAudioSrc(URL.createObjectURL(file));
     event.target.value = "";
   }
 
@@ -290,9 +364,128 @@ export default function Home() {
     setPlaying(false);
     setCurrentTime(0);
     setVideoDuration(0);
+    setDetectionError(null);
+    setDetectionResult(null);
+    setAppliedDetectionKey(null);
+    if (!audioSrc) {
+      setAudioDuration(0);
+      setAudioError(null);
+    }
+    setVideoFile(null);
     setVideoName(null);
     setVideoSrc(null);
     setVideoError(null);
+  }
+
+  function clearAudio() {
+    setPlaying(false);
+    setCurrentTime(0);
+    setAudioDuration(0);
+    setDetectionError(null);
+    setDetectionResult(null);
+    setAppliedDetectionKey(null);
+    setAudioFile(null);
+    setAudioName(null);
+    setAudioSrc(null);
+    setAudioError(null);
+  }
+
+  async function handleDetectAyahs() {
+    if (!detectionSourceFile) {
+      setDetectionError("Upload a clip or override audio before detecting ayahs.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("media", detectionSourceFile);
+
+    setDetectingAyahs(true);
+    setDetectionError(null);
+    setAppliedDetectionKey(null);
+
+    try {
+      const response = await fetch("/api/ayah-detect", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json()) as
+        | AyahDetectionResult
+        | { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          "error" in payload && payload.error
+            ? payload.error
+            : "Ayah detection failed."
+        );
+      }
+
+      setDetectionResult(payload as AyahDetectionResult);
+    } catch (err) {
+      setDetectionResult(null);
+      setDetectionError(
+        err instanceof Error ? err.message : "Ayah detection failed."
+      );
+    } finally {
+      setDetectingAyahs(false);
+    }
+  }
+
+  async function applyDetectedMatch(match: AyahDetectionMatch) {
+    try {
+      setDetectionError(null);
+
+      let targetSurah: Surah | undefined = surahs.find(
+        (surah) => surah.number === match.surahNumber
+      );
+      if (!targetSurah) {
+        const allSurahs = await fetchAllSurahs();
+        setSurahs(allSurahs);
+        targetSurah = allSurahs.find(
+          (surah) => surah.number === match.surahNumber
+        );
+      }
+
+      if (!targetSurah) {
+        throw new Error("The detected surah could not be loaded.");
+      }
+
+      const existingSurahIsLoaded = selectedSurah?.number === targetSurah.number;
+      const content = existingSurahIsLoaded
+        ? { ayahs, translations }
+        : await fetchSurahContent(targetSurah);
+      const rangeIndices = new Set(
+        Array.from(
+          { length: match.endAyah - match.startAyah + 1 },
+          (_, offset) => match.startAyah - 1 + offset
+        )
+      );
+      const rangeAyahs = content.ayahs.filter(
+        (ayah) =>
+          ayah.numberInSurah >= match.startAyah && ayah.numberInSurah <= match.endAyah
+      );
+
+      setAyahs(content.ayahs);
+      setTranslations(content.translations);
+      setSelectedSurah(targetSurah);
+      setSelectedAyahIndices(rangeIndices);
+      setSubtitles(
+        buildSubtitlesFromAyahRange(rangeAyahs, content.translations, {
+          detectedTimings: match.timings,
+          clipDuration: detectedMediaDuration > 0 ? detectedMediaDuration : undefined,
+          fallbackDuration: defaultDuration,
+        })
+      );
+      setSelectedSubIdx(null);
+      setCurrentTime(0);
+      setPlaying(false);
+      setTab("subtitles");
+      setAppliedDetectionKey(getDetectionKey(match));
+    } catch (err) {
+      setDetectionError(
+        err instanceof Error ? err.message : "Failed to apply the detected ayahs."
+      );
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -688,6 +881,13 @@ export default function Home() {
               className="hidden"
               onChange={handleVideoUpload}
             />
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.ogg,.webm"
+              className="hidden"
+              onChange={handleAudioUpload}
+            />
 
             <div className="flex flex-wrap items-start gap-4">
               <div className="min-w-[240px] flex-1">
@@ -736,6 +936,61 @@ export default function Home() {
                 )}
               </div>
 
+              <div className="min-w-[240px] flex-1">
+                <p className="font-mono-ui text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)]">
+                  Audio Track
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => audioInputRef.current?.click()}
+                    className="flex items-center gap-2 rounded-lg bg-[var(--emerald)] px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--emerald-light)]"
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span>{audioSrc ? "Replace Override" : "Override Audio"}</span>
+                  </button>
+
+                  {audioSrc && (
+                    <button
+                      type="button"
+                      onClick={clearAudio}
+                      className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
+                    >
+                      <X className="h-4 w-4" />
+                      <span>Clear Override</span>
+                    </button>
+                  )}
+
+                  <span className="text-sm text-[var(--text-muted)]">
+                    {audioSrc
+                      ? `Override track: ${audioName}`
+                      : videoName
+                        ? `Using clip audio from ${videoName}`
+                        : "Clip audio is used automatically. Override is optional."}
+                  </span>
+                </div>
+
+                {(audioDuration > 0 || audioError) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                    {audioDuration > 0 && (
+                      <span className="font-mono-ui text-[var(--text-dim)]">
+                        Duration {audioDuration.toFixed(1)}s
+                      </span>
+                    )}
+                    {audioError && (
+                      <span className="rounded-full bg-[var(--accent)]/12 px-2.5 py-1 text-[var(--accent)]">
+                        {audioError}
+                      </span>
+                    )}
+                    {usingClipAudio && !audioError && (
+                      <span className="rounded-full bg-[var(--emerald)]/12 px-2.5 py-1 text-[var(--emerald-light)]">
+                        Using clip audio automatically
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="w-full max-w-[360px]">
                 <p className="font-mono-ui text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)]">
                   Canvas Ratio
@@ -772,6 +1027,160 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="border-b border-[var(--border)] bg-[var(--surface)]/45 px-4 py-3">
+            <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
+                    Ayah Detection
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                    {detectionSourceLabel
+                      ? `Run Quran-aware ayah detection on ${detectionSourceLabel}.`
+                      : "Upload a reciter clip first, then detect the ayah range from its audio track."}
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
+                    Uses local ffmpeg extraction plus the Tarteel Whisper Quran model
+                    through Hugging Face when a token is configured.
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">
+                    Applying a detected range now auto-generates subtitles across the
+                    current clip duration instead of using the fixed seconds-per-ayah
+                    guess.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDetectAyahs}
+                  disabled={!detectionSourceFile || detectingAyahs}
+                  className={[
+                    "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
+                    detectionSourceFile && !detectingAyahs
+                      ? "bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-light)]"
+                      : "cursor-not-allowed bg-[var(--border)] text-[var(--text-dim)]",
+                  ].join(" ")}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>{detectingAyahs ? "Detecting..." : "Detect Ayah Range"}</span>
+                </button>
+              </div>
+
+              {detectingAyahs && (
+                <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Extracting clip audio, transcribing the recitation, and matching the ayah range...
+                  </p>
+                </div>
+              )}
+
+              {detectionError && (
+                <div className="mt-4 rounded-lg border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
+                  {detectionError}
+                </div>
+              )}
+
+              {detectionResult && (
+                <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
+                        Transcript
+                      </p>
+                      {bestDetection && (
+                        <span className="rounded-full bg-[var(--gold)]/12 px-2.5 py-1 text-[11px] text-[var(--gold-light)]">
+                          {Math.round(bestDetection.score * 100)}% match confidence
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      dir="rtl"
+                      className="mt-3 font-arabic-ui text-lg leading-loose text-[var(--text)]"
+                    >
+                      {detectionResult.transcript}
+                    </p>
+                    {detectionResult.warning && (
+                      <p className="mt-3 text-xs leading-relaxed text-[var(--text-dim)]">
+                        {detectionResult.warning}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
+                      Suggested Ranges
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {detectionResult.matches.length === 0 ? (
+                        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                          No confident ayah match yet. Try a cleaner clip or upload a dedicated recitation audio track.
+                        </div>
+                      ) : (
+                        detectionResult.matches.map((match) => {
+                          const matchKey = getDetectionKey(match);
+                          const isApplied = appliedDetectionKey === matchKey;
+
+                          return (
+                            <div
+                              key={matchKey}
+                              className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-[var(--text)]">
+                                    {match.surahName}
+                                  </p>
+                                  <p className="font-arabic-ui mt-0.5 text-base text-[var(--gold)]">
+                                    {match.surahArabicName}
+                                  </p>
+                                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                                    Ayah {match.startAyah}
+                                    {match.endAyah !== match.startAyah
+                                      ? `-${match.endAyah}`
+                                      : ""}{" "}
+                                    · {Math.round(match.score * 100)}%
+                                  </p>
+                                  {match.timingSource && (
+                                    <p className="mt-1 text-[11px] text-[var(--emerald-light)]">
+                                      {getTimingSourceLabel(match.timingSource)}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void applyDetectedMatch(match);
+                                  }}
+                                  className={[
+                                    "shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
+                                    isApplied
+                                      ? "bg-[var(--gold)] text-[var(--bg)]"
+                                      : "bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
+                                  ].join(" ")}
+                                >
+                                  {isApplied ? "Applied + Timed" : "Apply + Auto-time"}
+                                </button>
+                              </div>
+
+                              <p
+                                dir="rtl"
+                                className="mt-3 line-clamp-3 font-arabic-ui text-sm leading-loose text-[var(--text-muted)]"
+                              >
+                                {match.matchedText}
+                              </p>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+
           {/* Video Preview */}
           <div className="p-4 pb-2">
             <VideoPreview
@@ -779,6 +1188,7 @@ export default function Home() {
               currentTime={currentTime}
               subtitleStyleId={subtitleStyle}
               subtitlePlacement={subtitlePlacement}
+              playbackMode={playbackMode}
               aspectRatio={aspectRatio}
               videoSrc={videoSrc}
               videoName={videoName}
@@ -794,16 +1204,34 @@ export default function Home() {
             />
           </div>
 
+          <div className="px-4 py-2">
+            <AudioWaveform
+              audioSrc={activeAudioSrc}
+              audioName={activeAudioName}
+              audioDuration={audioDuration}
+              usingClipAudio={usingClipAudio}
+              hasOverride={Boolean(audioSrc)}
+              currentTime={currentTime}
+              playing={playing}
+              onTimeChange={setCurrentTime}
+              onDurationChange={setAudioDuration}
+              onPlayingChange={setPlaying}
+              onAudioError={setAudioError}
+            />
+          </div>
+
           {/* Timeline */}
           <div className="px-4 py-2">
             <TimelineTrack
               subtitles={subtitles}
+              currentTime={currentTime}
               totalDuration={totalDuration}
               selectedIdx={selectedSubIdx}
               onSelect={(idx) => {
                 setSelectedSubIdx(idx);
                 setCurrentTime(subtitles[idx].start);
               }}
+              onSeek={setCurrentTime}
             />
           </div>
 
@@ -842,4 +1270,107 @@ export default function Home() {
       )}
     </div>
   );
+}
+
+function getDetectionKey(match: AyahDetectionMatch): string {
+  return `${match.surahNumber}:${match.startAyah}:${match.endAyah}`;
+}
+
+function buildSubtitlesFromAyahRange(
+  ayahRange: Ayah[],
+  translations: TranslationAyah[],
+  options: {
+    detectedTimings?: AyahTimingSegment[];
+    clipDuration?: number;
+    fallbackDuration: number;
+  }
+): Subtitle[] {
+  if (ayahRange.length === 0) {
+    return [];
+  }
+
+  if (options.detectedTimings?.length === ayahRange.length) {
+    const timingByAyah = new Map(
+      options.detectedTimings.map((timing) => [timing.ayahNum, timing])
+    );
+
+    return ayahRange.map((ayah, index) => {
+      const translation = translations.find(
+        (item) => item.numberInSurah === ayah.numberInSurah
+      );
+      const timing = timingByAyah.get(ayah.numberInSurah);
+
+      return {
+        ayahNum: ayah.numberInSurah,
+        arabic: ayah.text,
+        translation: translation?.text ?? "",
+        start: timing?.start ?? 0,
+        end: timing?.end ?? options.fallbackDuration * (index + 1),
+      };
+    });
+  }
+
+  const clipDuration = options.clipDuration ?? 0;
+
+  if (clipDuration > 0) {
+    const weights = ayahRange.map((ayah) =>
+      Math.max(countTimingUnits(ayah.text), 1)
+    );
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+    let consumedWeight = 0;
+
+    return ayahRange.map((ayah, index) => {
+      const translation = translations.find(
+        (item) => item.numberInSurah === ayah.numberInSurah
+      );
+      const start = (consumedWeight / totalWeight) * clipDuration;
+      consumedWeight += weights[index];
+      const end =
+        index === ayahRange.length - 1
+          ? clipDuration
+          : (consumedWeight / totalWeight) * clipDuration;
+
+      return {
+        ayahNum: ayah.numberInSurah,
+        arabic: ayah.text,
+        translation: translation?.text ?? "",
+        start,
+        end,
+      };
+    });
+  }
+
+  let offset = 0;
+  const gap = 0.5;
+
+  return ayahRange.map((ayah) => {
+    const translation = translations.find(
+      (item) => item.numberInSurah === ayah.numberInSurah
+    );
+    const subtitle: Subtitle = {
+      ayahNum: ayah.numberInSurah,
+      arabic: ayah.text,
+      translation: translation?.text ?? "",
+      start: offset,
+      end: offset + options.fallbackDuration,
+    };
+
+    offset += options.fallbackDuration + gap;
+    return subtitle;
+  });
+}
+
+function countTimingUnits(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function getTimingSourceLabel(source: NonNullable<AyahDetectionMatch["timingSource"]>) {
+  switch (source) {
+    case "silence":
+      return "Audio-aligned from detected pauses";
+    case "hybrid":
+      return "Audio-aligned with silence + fallback";
+    default:
+      return "Duration-matched fallback timing";
+  }
 }

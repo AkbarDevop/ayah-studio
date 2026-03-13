@@ -59,6 +59,32 @@ export interface SubtitlePlacement {
   y: number;
 }
 
+export interface AyahTimingSegment {
+  ayahNum: number;
+  start: number;
+  end: number;
+}
+
+export interface AyahDetectionMatch {
+  surahNumber: number;
+  surahName: string;
+  surahArabicName: string;
+  startAyah: number;
+  endAyah: number;
+  score: number;
+  matchedText: string;
+  timings?: AyahTimingSegment[];
+  timingSource?: "silence" | "hybrid" | "weighted";
+}
+
+export interface AyahDetectionResult {
+  provider: string;
+  transcript: string;
+  matches: AyahDetectionMatch[];
+  warning?: string;
+}
+
 export type SidebarTab = "browse" | "subtitles" | "style";
 export type ExportFormat = "srt" | "ass" | "json";
 export type AspectRatioPreset = "landscape" | "portrait" | "square";
+export type PlaybackMode = "simulation" | "video" | "audio";

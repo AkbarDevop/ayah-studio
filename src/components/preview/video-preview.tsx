@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, Video, Move } from "lucide-react";
 import type {
   AspectRatioPreset,
+  PlaybackMode,
   Subtitle,
   SubtitlePlacement,
 } from "@/types";
@@ -13,6 +14,7 @@ interface VideoPreviewProps {
   currentTime: number;
   subtitleStyleId: string;
   subtitlePlacement: SubtitlePlacement;
+  playbackMode: PlaybackMode;
   aspectRatio: AspectRatioPreset;
   videoSrc: string | null;
   videoName: string | null;
@@ -86,6 +88,7 @@ export default function VideoPreview({
   currentTime,
   subtitleStyleId,
   subtitlePlacement,
+  playbackMode,
   aspectRatio,
   videoSrc,
   videoName,
@@ -106,14 +109,9 @@ export default function VideoPreview({
     null
   );
   const [videoReady, setVideoReady] = useState(false);
+  const isAudioTransport = playbackMode === "audio";
   const canPlay =
-    (Boolean(videoSrc) && videoReady && !videoError) || subtitles.length > 0;
-  const stageSizeClass =
-    aspectRatio === "portrait"
-      ? "max-w-[360px] pb-[177.7778%]"
-      : aspectRatio === "square"
-        ? "max-w-[560px] pb-[100%]"
-        : "max-w-none pb-[56.25%]";
+    Boolean(videoSrc) || subtitles.length > 0 || playbackMode === "audio";
 
   const currentSubtitle = useMemo(() => {
     return subtitles.find(
@@ -144,7 +142,11 @@ export default function VideoPreview({
     if (!videoReady || videoError) return;
 
     if (playing) {
-      if (video.duration && video.currentTime >= video.duration - 0.05) {
+      if (
+        !isAudioTransport &&
+        video.duration &&
+        video.currentTime >= video.duration - 0.05
+      ) {
         video.currentTime = 0;
         onTimeChange(0);
       }
@@ -156,6 +158,7 @@ export default function VideoPreview({
       video.pause();
     }
   }, [
+    isAudioTransport,
     playing,
     videoError,
     videoReady,
@@ -237,12 +240,10 @@ export default function VideoPreview({
   }
 
   return (
-    <div
-      className={`relative mx-auto w-full ${stageSizeClass}`}
-    >
+    <div className="preview-stage" data-preview-ratio={aspectRatio}>
       <div
         ref={stageRef}
-        className="absolute inset-0 overflow-hidden rounded-lg border border-[var(--border)]"
+        className="preview-stage-frame absolute inset-0"
       >
         {videoSrc ? (
           <>
@@ -251,6 +252,7 @@ export default function VideoPreview({
               src={videoSrc}
               className="absolute inset-0 h-full w-full object-cover"
               playsInline
+              muted={isAudioTransport}
               preload="auto"
               onLoadStart={() => {
                 setVideoReady(false);
@@ -270,14 +272,26 @@ export default function VideoPreview({
                 onVideoError(null);
               }}
               onTimeUpdate={(event) => {
-                onTimeChange(event.currentTarget.currentTime);
+                if (!isAudioTransport) {
+                  onTimeChange(event.currentTarget.currentTime);
+                }
               }}
-              onPlay={() => onPlayingChange(true)}
-              onPause={() => onPlayingChange(false)}
+              onPlay={() => {
+                if (!isAudioTransport) {
+                  onPlayingChange(true);
+                }
+              }}
+              onPause={() => {
+                if (!isAudioTransport) {
+                  onPlayingChange(false);
+                }
+              }}
               onEnded={(event) => {
-                event.currentTarget.currentTime = 0;
-                onTimeChange(0);
-                onPlayingChange(false);
+                if (!isAudioTransport) {
+                  event.currentTarget.currentTime = 0;
+                  onTimeChange(0);
+                  onPlayingChange(false);
+                }
               }}
               onError={() => {
                 setVideoReady(false);

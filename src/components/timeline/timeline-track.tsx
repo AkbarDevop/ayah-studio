@@ -1,20 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type MouseEvent } from "react";
 import type { Subtitle } from "@/types";
 
 interface TimelineTrackProps {
   subtitles: Subtitle[];
+  currentTime: number;
   totalDuration: number;
   selectedIdx: number | null;
   onSelect: (idx: number) => void;
+  onSeek: (seconds: number) => void;
 }
 
 export default function TimelineTrack({
   subtitles,
+  currentTime,
   totalDuration,
   selectedIdx,
   onSelect,
+  onSeek,
 }: TimelineTrackProps) {
   const timeMarkers = useMemo(() => {
     if (totalDuration <= 0) return [];
@@ -31,8 +35,22 @@ export default function TimelineTrack({
     return `${m}:${String(s).padStart(2, "0")}`;
   }
 
+  const playheadPercent =
+    totalDuration > 0
+      ? Math.min(100, Math.max(0, (currentTime / totalDuration) * 100))
+      : 0;
+
+  function handleSeek(event: MouseEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const relativeX = (event.clientX - bounds.left) / bounds.width;
+    onSeek(Math.min(totalDuration, Math.max(0, relativeX * totalDuration)));
+  }
+
   return (
-    <div className="relative h-[60px] w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-alt)]">
+    <div
+      className="relative h-[60px] w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-alt)]"
+      onClick={handleSeek}
+    >
       {/* Time markers */}
       {timeMarkers.map((t) => {
         const leftPercent = totalDuration > 0 ? (t / totalDuration) * 100 : 0;
@@ -50,6 +68,13 @@ export default function TimelineTrack({
         );
       })}
 
+      <div
+        className="pointer-events-none absolute inset-y-0 z-[2] w-px bg-[var(--gold-light)]"
+        style={{ left: `${playheadPercent}%` }}
+      >
+        <div className="absolute -left-[4px] top-1 h-2 w-2 rounded-full border border-[var(--bg)] bg-[var(--gold-light)]" />
+      </div>
+
       {/* Subtitle blocks */}
       {subtitles.map((sub, idx) => {
         const leftPercent =
@@ -64,9 +89,12 @@ export default function TimelineTrack({
           <button
             key={`block-${sub.ayahNum}-${idx}`}
             type="button"
-            onClick={() => onSelect(idx)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(idx);
+            }}
             className={[
-              "font-mono-ui absolute top-[12px] flex h-[36px] cursor-pointer items-center justify-center rounded-sm border px-1 transition-colors",
+              "font-mono-ui absolute top-[12px] z-[3] flex h-[36px] cursor-pointer items-center justify-center rounded-sm border px-1 transition-colors",
               isSelected
                 ? "border-[var(--gold-light)] bg-[var(--gold)] text-[var(--bg)]"
                 : "border-transparent bg-[var(--emerald)] text-white hover:bg-[var(--emerald-light)]",
