@@ -26,6 +26,9 @@ const HUGGINGFACE_ASR_MODELS = [
 ] as const;
 const SILENCE_FILTER = "silencedetect=noise=-18dB:d=0.08";
 const SILENCE_EDGE_PADDING_SECONDS = 0.35;
+const MIN_SPEECH_SEGMENT_SECONDS = 0.55;
+const MAX_TRANSCRIPT_CHUNK_SECONDS = 4.25;
+const MAX_TRANSCRIPT_CHUNKS = 12;
 
 export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") ?? "");
@@ -419,11 +422,10 @@ function buildSpeechSegments(
   }
 
   const speechSegments: Array<{ start: number; end: number }> = [];
-  const minimumSpeechDuration = 0.65;
   let cursor = 0;
 
   for (const silence of silenceRanges) {
-    if (silence.start - cursor >= minimumSpeechDuration) {
+    if (silence.start - cursor >= MIN_SPEECH_SEGMENT_SECONDS) {
       speechSegments.push({
         start: cursor,
         end: silence.start,
@@ -433,14 +435,46 @@ function buildSpeechSegments(
     cursor = Math.max(cursor, silence.end);
   }
 
-  if (clipDuration - cursor >= minimumSpeechDuration) {
+  if (clipDuration - cursor >= MIN_SPEECH_SEGMENT_SECONDS) {
     speechSegments.push({
       start: cursor,
       end: clipDuration,
     });
   }
 
-  return mergeSegmentsDownToLimit(speechSegments, 8);
+  return mergeSegmentsDownToLimit(
+    splitLongSpeechSegments(speechSegments),
+    MAX_TRANSCRIPT_CHUNKS
+  );
+}
+
+function splitLongSpeechSegments(segments: Array<{ start: number; end: number }>) {
+  const expanded: Array<{ start: number; end: number }> = [];
+
+  for (const segment of segments) {
+    const duration = segment.end - segment.start;
+    if (duration <= MAX_TRANSCRIPT_CHUNK_SECONDS) {
+      expanded.push(segment);
+      continue;
+    }
+
+    const partCount = Math.ceil(duration / MAX_TRANSCRIPT_CHUNK_SECONDS);
+    const partDuration = duration / partCount;
+
+    for (let index = 0; index < partCount; index += 1) {
+      const start = segment.start + partDuration * index;
+      const end =
+        index === partCount - 1
+          ? segment.end
+          : segment.start + partDuration * (index + 1);
+
+      if (end - start >= MIN_SPEECH_SEGMENT_SECONDS) {
+        expanded.push({ start, end });
+      }
+    }
+  }
+
+  return expanded;
 }
 
 function mergeSegmentsDownToLimit(
