@@ -8,11 +8,17 @@ import {
   BASMALA_DISPLAY_TEXT,
   BASMALA_MATCH_TEXT,
   detectAyahRangesFromTranscript,
+  FATIHA_MATCH_TEXT,
   getAyahRangeMetadata,
   hasLeadingBasmala,
+  hasLeadingFatiha,
+  hasLeadingIstiadha,
+  ISTIADHA_DISPLAY_TEXT,
+  ISTIADHA_MATCH_TEXTS,
   normalizeArabicText,
   scoreArabicTextSimilarity,
   startsWithBasmala,
+  stripLeadingRecitationIntro,
 } from "@/lib/ayah-detection";
 import {
   MAX_AYAH_DETECT_MULTIPART_OVERHEAD_BYTES,
@@ -98,12 +104,30 @@ export async function POST(request: Request) {
       chunks.length > 0
         ? chunks
         : await transcribeSpeechSegments(outputPath, clipDuration, silenceRanges, token);
-    const leadingBasmalaSegment = detectLeadingBasmalaSegment(
+    const leadingSegments = detectLeadingRecitationSegments(
       transcript,
       transcriptChunks,
       clipDuration
     );
-    const rawMatches = await detectAyahRangesFromTranscript(transcript, 3);
+    const trimmedTranscriptChunks = trimTranscriptChunksAfterTime(
+      transcriptChunks,
+      getLeadingTimingOffset(leadingSegments)
+    );
+    const trimmedTranscript =
+      buildTranscriptFromChunks(trimmedTranscriptChunks) ||
+      stripLeadingRecitationIntro(transcript);
+    const rawMatches = mergeAyahMatches(
+      await detectAyahRangesFromTranscript(transcript, 3),
+      trimmedTranscript && trimmedTranscript !== normalizeArabicText(transcript)
+        ? await detectAyahRangesFromTranscript(trimmedTranscript, 3).then(
+            (matches) =>
+              matches.map((match) => ({
+                ...match,
+                score: Math.min(1, match.score + 0.04),
+              }))
+          )
+        : []
+    );
     const matches = await Promise.all(
       rawMatches.map((match) =>
         enrichMatchWithTiming(
@@ -111,7 +135,7 @@ export async function POST(request: Request) {
           clipDuration,
           silenceRanges,
           transcriptChunks,
-          leadingBasmalaSegment
+          leadingSegments
         )
       )
     );
@@ -166,11 +190,12 @@ async function enrichMatchWithTiming(
   clipDuration: number,
   silenceRanges: SilenceRange[],
   transcriptChunks: TranscriptChunk[],
-  leadingBasmalaSegment: {
+  leadingSegments: Array<{
+    kind: "istiadha" | "basmala" | "fatiha";
+    arabic?: string;
     start: number;
     end: number;
-    arabic: string;
-  } | null
+  }>
 ): Promise<AyahDetectionMatch> {
   const range = await getAyahRangeMetadata(
     match.surahNumber,
@@ -182,17 +207,13 @@ async function enrichMatchWithTiming(
     return match;
   }
 
-  const includeLeadingBasmala =
-    leadingBasmalaSegment && !startsWithBasmala(range.ayahs[0].text)
-      ? {
-          kind: "basmala" as const,
-          arabic: leadingBasmalaSegment.arabic,
-          start: leadingBasmalaSegment.start,
-          end: Math.min(leadingBasmalaSegment.end, clipDuration),
-        }
-      : null;
-  const timingWindowStart = includeLeadingBasmala?.end ?? 0;
-  const timingTranscriptChunks = includeLeadingBasmala
+  const includedLeadingSegments = selectLeadingSegmentsForMatch(
+    leadingSegments,
+    match.surahNumber,
+    range.ayahs[0]?.text ?? ""
+  );
+  const timingWindowStart = getLeadingTimingOffset(includedLeadingSegments);
+  const timingTranscriptChunks = timingWindowStart > 0
     ? trimTranscriptChunksAfterTime(transcriptChunks, timingWindowStart)
     : transcriptChunks;
 
@@ -208,15 +229,10 @@ async function enrichMatchWithTiming(
       ...match,
       timings: chunkAlignedTimings,
       timingSource: "chunks",
-      leadingSegment: includeLeadingBasmala
-        ? {
-            ...includeLeadingBasmala,
-            end: Math.min(
-              includeLeadingBasmala.end,
-              chunkAlignedTimings[0]?.start ?? includeLeadingBasmala.end
-            ),
-          }
-        : undefined,
+      leadingSegments: clampLeadingSegmentsToFirstTiming(
+        includedLeadingSegments,
+        chunkAlignedTimings[0]?.start
+      ),
     };
   }
 
@@ -234,15 +250,10 @@ async function enrichMatchWithTiming(
     ...match,
     timings: timings.segments,
     timingSource: timings.source,
-    leadingSegment: includeLeadingBasmala
-      ? {
-          ...includeLeadingBasmala,
-          end: Math.min(
-            includeLeadingBasmala.end,
-            timings.segments[0]?.start ?? includeLeadingBasmala.end
-          ),
-        }
-      : undefined,
+    leadingSegments: clampLeadingSegmentsToFirstTiming(
+      includedLeadingSegments,
+      timings.segments[0]?.start
+    ),
   };
 }
 
@@ -623,57 +634,305 @@ function normalizeChunkTimestamp(timestamp: unknown) {
   return [start, end] as const;
 }
 
-function detectLeadingBasmalaSegment(
+function detectLeadingRecitationSegments(
   transcript: string,
   transcriptChunks: TranscriptChunk[],
   clipDuration: number
 ) {
-  if (!hasLeadingBasmala(transcript) || clipDuration <= 0) {
-    return null;
+  if (clipDuration <= 0) {
+    return [] as Array<{
+      kind: "istiadha" | "basmala" | "fatiha";
+      arabic?: string;
+      start: number;
+      end: number;
+    }>;
   }
+
+  const leadingSegments: Array<{
+    kind: "istiadha" | "basmala" | "fatiha";
+    arabic?: string;
+    start: number;
+    end: number;
+  }> = [];
+
+  const normalizedTranscript = normalizeArabicText(transcript);
+  let workingChunks = transcriptChunks;
+  let currentStart = 0;
+
+  const pushSegment = (
+    segment: {
+      kind: "istiadha" | "basmala" | "fatiha";
+      arabic?: string;
+      start: number;
+      end: number;
+    } | null
+  ) => {
+    if (!segment) {
+      return;
+    }
+
+    leadingSegments.push({
+      ...segment,
+      end: Math.min(Math.max(segment.end, segment.start + 0.1), clipDuration),
+    });
+    currentStart = leadingSegments[leadingSegments.length - 1].end;
+    workingChunks = trimTranscriptChunksAfterTime(transcriptChunks, currentStart);
+  };
+
+  if (hasLeadingIstiadha(normalizedTranscript)) {
+    pushSegment(
+      detectLeadingPhraseSegment({
+        transcriptChunks: workingChunks,
+        clipDuration,
+        startOffset: currentStart,
+        kind: "istiadha",
+        displayText: ISTIADHA_DISPLAY_TEXT,
+        matchTexts: [...ISTIADHA_MATCH_TEXTS],
+        fallbackDuration: 1.8,
+        maxChunks: 2,
+      })
+    );
+  }
+
+  if (hasLeadingFatiha(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha"))) {
+    pushSegment(
+      detectLeadingPhraseSegment({
+        transcriptChunks: workingChunks,
+        clipDuration,
+        startOffset: currentStart,
+        kind: "fatiha",
+        displayText: undefined,
+        matchTexts: [FATIHA_MATCH_TEXT],
+        fallbackDuration: 8.5,
+        maxChunks: 8,
+        minScore: 0.5,
+      })
+    );
+  } else if (hasLeadingBasmala(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha"))) {
+    pushSegment(
+      detectLeadingPhraseSegment({
+        transcriptChunks: workingChunks,
+        clipDuration,
+        startOffset: currentStart,
+        kind: "basmala",
+        displayText: BASMALA_DISPLAY_TEXT,
+        matchTexts: [BASMALA_MATCH_TEXT],
+        fallbackDuration: 2.2,
+        maxChunks: 3,
+      })
+    );
+  }
+
+  if (
+    leadingSegments.some((segment) => segment.kind === "fatiha") &&
+    hasLeadingBasmala(stripLeadingRecitationIntroPrefix(normalizedTranscript, "istiadha", "fatiha"))
+  ) {
+    pushSegment(
+      detectLeadingPhraseSegment({
+        transcriptChunks: workingChunks,
+        clipDuration,
+        startOffset: currentStart,
+        kind: "basmala",
+        displayText: BASMALA_DISPLAY_TEXT,
+        matchTexts: [BASMALA_MATCH_TEXT],
+        fallbackDuration: 2.2,
+        maxChunks: 3,
+      })
+    );
+  }
+
+  return leadingSegments;
+}
+
+function detectLeadingPhraseSegment(options: {
+  transcriptChunks: TranscriptChunk[];
+  clipDuration: number;
+  startOffset: number;
+  kind: "istiadha" | "basmala" | "fatiha";
+  displayText?: string;
+  matchTexts: string[];
+  fallbackDuration: number;
+  maxChunks: number;
+  minScore?: number;
+}) {
+  const {
+    transcriptChunks,
+    clipDuration,
+    startOffset,
+    kind,
+    displayText,
+    matchTexts,
+    fallbackDuration,
+    maxChunks,
+    minScore = 0.62,
+  } = options;
 
   if (transcriptChunks.length === 0) {
     return {
-      arabic: BASMALA_DISPLAY_TEXT,
-      start: 0,
-      end: Math.min(clipDuration, 2.2),
+      kind,
+      arabic: displayText,
+      start: startOffset,
+      end: Math.min(clipDuration, startOffset + fallbackDuration),
     };
   }
 
   let cumulativeText = "";
-  let cumulativeEnd = 0;
-  let best: { score: number; end: number; text: string } | null = null;
+  let cumulativeEnd = startOffset;
+  let best:
+    | {
+        score: number;
+        end: number;
+        text: string;
+        matchText: string;
+      }
+    | null = null;
 
-  for (const chunk of transcriptChunks.slice(0, 3)) {
+  for (const chunk of transcriptChunks.slice(0, maxChunks)) {
     cumulativeText = `${cumulativeText} ${chunk.text}`.trim();
     cumulativeEnd = chunk.end;
-    const score = scoreArabicTextSimilarity(cumulativeText, BASMALA_MATCH_TEXT);
 
-    if (!best || score > best.score) {
-      best = {
-        score,
-        end: cumulativeEnd,
-        text: cumulativeText,
-      };
+    for (const matchText of matchTexts) {
+      const score = scoreArabicTextSimilarity(cumulativeText, matchText);
+      if (!best || score > best.score) {
+        best = {
+          score,
+          end: cumulativeEnd,
+          text: cumulativeText,
+          matchText,
+        };
+      }
     }
   }
 
-  if (!best) {
+  if (!best || best.score < minScore) {
     return null;
   }
 
-  const basmalaWords = countWords(BASMALA_MATCH_TEXT);
-  const totalWords = Math.max(countWords(best.text), basmalaWords);
+  const targetWords = countWords(best.matchText);
+  const totalWords = Math.max(countWords(best.text), targetWords);
   const estimatedEnd = Math.max(
-    0.6,
-    Math.min(best.end, best.end * (basmalaWords / totalWords))
+    startOffset + 0.6,
+    Math.min(
+      best.end,
+      startOffset + (best.end - startOffset) * (targetWords / totalWords)
+    )
   );
 
   return {
-    arabic: BASMALA_DISPLAY_TEXT,
-    start: 0,
-    end: Math.min(Math.max(estimatedEnd, 0.9), clipDuration),
+    kind,
+    arabic: displayText,
+    start: startOffset,
+    end: Math.min(estimatedEnd, clipDuration),
   };
+}
+
+function mergeAyahMatches(
+  baseMatches: AyahDetectionMatch[],
+  preferredMatches: AyahDetectionMatch[]
+) {
+  const merged = new Map<string, AyahDetectionMatch>();
+
+  for (const match of [...baseMatches, ...preferredMatches]) {
+    const key = `${match.surahNumber}:${match.startAyah}:${match.endAyah}`;
+    const existing = merged.get(key);
+    if (!existing || match.score > existing.score) {
+      merged.set(key, match);
+    }
+  }
+
+  return Array.from(merged.values())
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3);
+}
+
+function getLeadingTimingOffset(
+  leadingSegments: Array<{ start: number; end: number }>
+) {
+  return leadingSegments[leadingSegments.length - 1]?.end ?? 0;
+}
+
+function selectLeadingSegmentsForMatch(
+  leadingSegments: Array<{
+    kind: "istiadha" | "basmala" | "fatiha";
+    arabic?: string;
+    start: number;
+    end: number;
+  }>,
+  surahNumber: number,
+  firstAyahText: string
+) {
+  if (surahNumber === 1) {
+    return leadingSegments.filter((segment) => segment.kind !== "fatiha");
+  }
+
+  return leadingSegments.filter(
+    (segment) =>
+      segment.kind !== "basmala" || !startsWithBasmala(firstAyahText)
+  );
+}
+
+function clampLeadingSegmentsToFirstTiming(
+  leadingSegments: Array<{
+    kind: "istiadha" | "basmala" | "fatiha";
+    arabic?: string;
+    start: number;
+    end: number;
+  }>,
+  firstTimingStart: number | undefined
+) {
+  if (leadingSegments.length === 0) {
+    return undefined;
+  }
+
+  return leadingSegments.map((segment, index) => {
+    const nextStart =
+      index === leadingSegments.length - 1 ? firstTimingStart : leadingSegments[index + 1]?.start;
+
+    return {
+      ...segment,
+      end:
+        typeof nextStart === "number"
+          ? Math.min(segment.end, nextStart)
+          : segment.end,
+    };
+  });
+}
+
+function buildTranscriptFromChunks(transcriptChunks: TranscriptChunk[]) {
+  return transcriptChunks.map((chunk) => chunk.text.trim()).filter(Boolean).join(" ").trim();
+}
+
+function stripLeadingRecitationIntroPrefix(
+  text: string,
+  ...segmentKinds: Array<"istiadha" | "fatiha" | "basmala">
+) {
+  let current = normalizeArabicText(text);
+
+  for (const kind of segmentKinds) {
+    if (kind === "istiadha") {
+      current = stripSpecificLeadingText(current, ISTIADHA_MATCH_TEXTS);
+    } else if (kind === "fatiha") {
+      current = stripSpecificLeadingText(current, [FATIHA_MATCH_TEXT]);
+    } else {
+      current = stripSpecificLeadingText(current, [BASMALA_MATCH_TEXT]);
+    }
+  }
+
+  return current;
+}
+
+function stripSpecificLeadingText(input: string, candidates: readonly string[]) {
+  for (const candidate of candidates) {
+    if (input === candidate) {
+      return "";
+    }
+
+    if (input.startsWith(`${candidate} `)) {
+      return input.slice(candidate.length).trim();
+    }
+  }
+
+  return input;
 }
 
 async function runProcess(command: string, args: string[]) {

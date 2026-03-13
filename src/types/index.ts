@@ -85,8 +85,8 @@ export interface AyahTimingSegment {
 }
 
 export interface LeadingRecitationSegment {
-  kind: "basmala";
-  arabic: string;
+  kind: "istiadha" | "basmala" | "fatiha";
+  arabic?: string;
   start: number;
   end: number;
 }
@@ -101,7 +101,7 @@ export interface AyahDetectionMatch {
   matchedText: string;
   timings?: AyahTimingSegment[];
   timingSource?: "chunks" | "silence" | "hybrid" | "weighted";
-  leadingSegment?: LeadingRecitationSegment;
+  leadingSegments?: LeadingRecitationSegment[];
 }
 
 export interface AyahDetectionResult {

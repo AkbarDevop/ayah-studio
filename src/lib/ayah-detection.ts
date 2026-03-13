@@ -44,8 +44,25 @@ export interface AyahRangeMetadata {
 
 const DIACRITICS_REGEX = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u08D4-\u08FF]/g;
 const NON_ARABIC_REGEX = /[^ء-ي0-9\s]/g;
+export const ISTIADHA_MATCH_TEXTS = [
+  "اعوذ بالله من الشيطان الرجيم",
+  "اعوذ بالله السميع العليم من الشيطان الرجيم",
+] as const;
+export const ISTIADHA_DISPLAY_TEXT =
+  "أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ";
 export const BASMALA_MATCH_TEXT = "بسم الله الرحمن الرحيم";
 export const BASMALA_DISPLAY_TEXT = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ";
+export const FATIHA_MATCH_TEXT = normalizeArabicText(
+  [
+    "بسم الله الرحمن الرحيم",
+    "الحمد لله رب العالمين",
+    "الرحمن الرحيم",
+    "مالك يوم الدين",
+    "اياك نعبد واياك نستعين",
+    "اهدنا الصراط المستقيم",
+    "صراط الذين انعمت عليهم غير المغضوب عليهم ولا الضالين",
+  ].join(" ")
+);
 
 let quranCorpusPromise: Promise<NormalizedSurah[]> | null = null;
 
@@ -291,14 +308,28 @@ function buildMatchingTextVariants(input: string): MatchingTextVariant[] {
     return [];
   }
 
-  const variants = [normalizedText];
-  const strippedBasmala = stripLeadingBasmala(normalizedText);
+  const variants = new Set<string>([normalizedText]);
+  const queue = [normalizedText];
 
-  if (strippedBasmala && strippedBasmala !== normalizedText) {
-    variants.push(strippedBasmala);
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
+      continue;
+    }
+
+    for (const next of [
+      stripLeadingIstiadha(current),
+      stripLeadingFatiha(current),
+      stripLeadingBasmala(current),
+    ]) {
+      if (next && next !== current && !variants.has(next)) {
+        variants.add(next);
+        queue.push(next);
+      }
+    }
   }
 
-  return variants.map((variant) => ({
+  return Array.from(variants).map((variant) => ({
     normalizedText: variant,
     tokenCount: countWords(variant),
     tokens: new Set(variant.split(" ")),
@@ -306,7 +337,21 @@ function buildMatchingTextVariants(input: string): MatchingTextVariant[] {
   }));
 }
 
-function stripLeadingBasmala(input: string) {
+export function stripLeadingIstiadha(input: string) {
+  for (const variant of ISTIADHA_MATCH_TEXTS) {
+    if (input === variant) {
+      return "";
+    }
+
+    if (input.startsWith(`${variant} `)) {
+      return input.slice(variant.length).trim();
+    }
+  }
+
+  return input;
+}
+
+export function stripLeadingBasmala(input: string) {
   if (input === BASMALA_MATCH_TEXT) {
     return "";
   }
@@ -318,9 +363,63 @@ function stripLeadingBasmala(input: string) {
   return input;
 }
 
+export function stripLeadingFatiha(input: string) {
+  if (input === FATIHA_MATCH_TEXT) {
+    return "";
+  }
+
+  if (input.startsWith(`${FATIHA_MATCH_TEXT} `)) {
+    return input.slice(FATIHA_MATCH_TEXT.length).trim();
+  }
+
+  return input;
+}
+
+export function hasLeadingIstiadha(input: string) {
+  return stripLeadingIstiadha(normalizeArabicText(input)) !==
+    normalizeArabicText(input);
+}
+
 export function hasLeadingBasmala(input: string) {
   return stripLeadingBasmala(normalizeArabicText(input)) !==
     normalizeArabicText(input);
+}
+
+export function hasLeadingFatiha(input: string) {
+  return stripLeadingFatiha(normalizeArabicText(input)) !==
+    normalizeArabicText(input);
+}
+
+export function stripLeadingRecitationIntro(input: string) {
+  let current = normalizeArabicText(input);
+  let changed = false;
+
+  while (current) {
+    let next = stripLeadingIstiadha(current);
+    if (next !== current) {
+      current = next;
+      changed = true;
+      continue;
+    }
+
+    next = stripLeadingFatiha(current);
+    if (next !== current) {
+      current = next;
+      changed = true;
+      continue;
+    }
+
+    next = stripLeadingBasmala(current);
+    if (next !== current) {
+      current = next;
+      changed = true;
+      continue;
+    }
+
+    break;
+  }
+
+  return changed ? current : normalizeArabicText(input);
 }
 
 export function startsWithBasmala(input: string) {
@@ -328,6 +427,14 @@ export function startsWithBasmala(input: string) {
   return (
     normalized === BASMALA_MATCH_TEXT ||
     normalized.startsWith(`${BASMALA_MATCH_TEXT} `)
+  );
+}
+
+export function startsWithFatiha(input: string) {
+  const normalized = normalizeArabicText(input);
+  return (
+    normalized === FATIHA_MATCH_TEXT ||
+    normalized.startsWith(`${FATIHA_MATCH_TEXT} `)
   );
 }
 

@@ -12,20 +12,25 @@ export function buildSubtitlesFromAyahRange(
   translations: TranslationAyah[],
   options: {
     surahLabel?: string;
+    timeOffset?: number;
     detectedTimings?: AyahTimingSegment[];
     clipDuration?: number;
     fallbackDuration: number;
     formatting?: SubtitleFormatting;
-    leadingSubtitle?: Subtitle;
+    leadingSubtitles?: Subtitle[];
   }
 ): Subtitle[] {
   const formatting = options.formatting ?? DEFAULT_SUBTITLE_FORMATTING;
+  const timeOffset = options.timeOffset ?? 0;
   const translationsByAyah = new Map(
     translations.map((translation) => [translation.numberInSurah, translation])
   );
-  const prefixSubtitles = options.leadingSubtitle
-    ? [{ ...options.leadingSubtitle, chunkIndex: 1, chunkCount: 1 }]
-    : [];
+  const prefixSubtitles =
+    options.leadingSubtitles?.map((subtitle) => ({
+      ...subtitle,
+      chunkIndex: 1,
+      chunkCount: 1,
+    })) ?? [];
 
   if (ayahRange.length === 0) {
     return prefixSubtitles;
@@ -48,8 +53,8 @@ export function buildSubtitlesFromAyahRange(
           label: formatAyahLabel(options.surahLabel, ayah.numberInSurah),
           arabic: ayah.text,
           translation: translation?.text ?? "",
-          start: timing?.start ?? 0,
-          end: timing?.end ?? options.fallbackDuration * (index + 1),
+          start: (timing?.start ?? 0) + timeOffset,
+          end: (timing?.end ?? options.fallbackDuration * (index + 1)) + timeOffset,
         };
       }),
       formatting
@@ -83,8 +88,8 @@ export function buildSubtitlesFromAyahRange(
           label: formatAyahLabel(options.surahLabel, ayah.numberInSurah),
           arabic: ayah.text,
           translation: translation?.text ?? "",
-          start,
-          end,
+          start: start + timeOffset,
+          end: end + timeOffset,
         };
       }),
       formatting
@@ -105,8 +110,8 @@ export function buildSubtitlesFromAyahRange(
         label: formatAyahLabel(options.surahLabel, ayah.numberInSurah),
         arabic: ayah.text,
         translation: translation?.text ?? "",
-        start: offset,
-        end: offset + options.fallbackDuration,
+        start: offset + timeOffset,
+        end: offset + options.fallbackDuration + timeOffset,
       };
 
       offset += options.fallbackDuration + gap;

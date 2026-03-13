@@ -62,7 +62,7 @@ export function useSubtitles(onResetPlayback: () => void) {
       surahLabel?: string;
       detectedTimings?: AyahTimingSegment[];
       clipDuration?: number;
-      leadingSubtitle?: Subtitle;
+      leadingSubtitles?: Subtitle[];
     }
   ) {
     const nextSubtitles = buildSubtitlesFromAyahRange(ayahRange, translations, {
@@ -71,7 +71,7 @@ export function useSubtitles(onResetPlayback: () => void) {
       clipDuration: options.clipDuration,
       fallbackDuration: defaultDuration,
       formatting: subtitleFormatting,
-      leadingSubtitle: options.leadingSubtitle,
+      leadingSubtitles: options.leadingSubtitles,
     });
 
     applyGeneratedSubtitles(nextSubtitles);

@@ -30,7 +30,12 @@ import {
 } from "@/lib/subtitle-formatting";
 import { MAX_YOUTUBE_IMPORT_MB } from "@/lib/youtube-import";
 import { SUBTITLE_STYLES, RECITERS } from "@/lib/constants";
-import { fetchAllSurahs, fetchBasmalaTranslation } from "@/lib/quran-api";
+import {
+  fetchAllSurahs,
+  fetchBasmalaTranslation,
+  fetchSurahWithTranslation,
+} from "@/lib/quran-api";
+import { buildSubtitlesFromAyahRange } from "@/lib/subtitle-generation";
 import { useQuranData } from "@/hooks/useQuranData";
 import { useMediaState } from "@/hooks/useMediaState";
 import { usePlayback, useSimulationTimer } from "@/hooks/usePlayback";
@@ -272,23 +277,17 @@ export default function Home() {
       quran.setTranslations(content.translations);
       quran.setSelectedSurah(targetSurah);
       quran.setSelectedAyahIndices(rangeIndices);
-      const leadingSubtitle = match.leadingSegment
-        ? {
-            ayahNum: 0,
-            label: "Basmala",
-            arabic: match.leadingSegment.arabic,
-            translation: await fetchBasmalaTranslation(
-              quran.translationEdition
-            ).catch(() => ""),
-            start: match.leadingSegment.start,
-            end: match.leadingSegment.end,
-          }
-        : undefined;
+      const leadingSubtitles = await buildLeadingSubtitles(
+        match,
+        quran.translationEdition,
+        subtitlesState.defaultDuration,
+        subtitlesState.subtitleFormatting
+      );
       subtitlesState.applyDetectedSubtitles(rangeAyahs, content.translations, {
         surahLabel: targetSurah.englishName,
         detectedTimings: match.timings,
         clipDuration: detectedMediaDuration > 0 ? detectedMediaDuration : undefined,
-        leadingSubtitle,
+        leadingSubtitles,
       });
       detection.setAppliedDetectionMode(mode);
       detection.setAppliedDetectionKey(getDetectionKey(match));
@@ -1465,6 +1464,65 @@ function shouldAutoApplyDetection(
   }
 
   return bestMatch.score - nextBestMatch.score >= 0.08;
+}
+
+async function buildLeadingSubtitles(
+  match: AyahDetectionMatch,
+  translationEdition: string,
+  fallbackDuration: number,
+  formatting: Parameters<typeof buildSubtitlesFromAyahRange>[2]["formatting"]
+) {
+  const segments = match.leadingSegments ?? [];
+  if (segments.length === 0) {
+    return undefined;
+  }
+
+  const subtitles = [];
+
+  for (const segment of segments) {
+    if (segment.kind === "basmala") {
+      subtitles.push({
+        ayahNum: 0,
+        label: "Basmala",
+        arabic: segment.arabic ?? "",
+        translation: await fetchBasmalaTranslation(translationEdition).catch(() => ""),
+        start: segment.start,
+        end: segment.end,
+      });
+      continue;
+    }
+
+    if (segment.kind === "istiadha") {
+      subtitles.push({
+        ayahNum: 0,
+        label: "A'udhu Billah",
+        arabic: segment.arabic ?? "",
+        translation: "",
+        start: segment.start,
+        end: segment.end,
+      });
+      continue;
+    }
+
+    if (segment.kind === "fatiha") {
+      const fatihaContent = await fetchSurahWithTranslation(1, translationEdition);
+      subtitles.push(
+        ...buildSubtitlesFromAyahRange(
+          fatihaContent.ayahs,
+          fatihaContent.translations,
+          {
+            surahLabel: "Al-Faatiha",
+            clipDuration: Math.max(segment.end - segment.start, 0.1),
+            timeOffset: segment.start,
+            fallbackDuration,
+            formatting,
+          }
+        )
+      );
+    }
+  }
+
+  return subtitles.length > 0 ? subtitles : undefined;
 }
 
 function getTimingSourceLabel(source: NonNullable<AyahDetectionMatch["timingSource"]>) {
