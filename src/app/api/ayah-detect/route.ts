@@ -191,11 +191,16 @@ async function enrichMatchWithTiming(
           end: Math.min(leadingBasmalaSegment.end, clipDuration),
         }
       : null;
+  const timingWindowStart = includeLeadingBasmala?.end ?? 0;
+  const timingTranscriptChunks = includeLeadingBasmala
+    ? trimTranscriptChunksAfterTime(transcriptChunks, timingWindowStart)
+    : transcriptChunks;
 
   const chunkAlignedTimings = buildAyahTimingSegmentsFromTranscriptChunks(
     range.ayahs,
     clipDuration,
-    transcriptChunks
+    timingTranscriptChunks,
+    timingWindowStart
   );
 
   if (chunkAlignedTimings) {
@@ -221,7 +226,8 @@ async function enrichMatchWithTiming(
       wordCount: ayah.wordCount,
     })),
     clipDuration,
-    silenceRanges
+    silenceRanges,
+    timingWindowStart
   );
 
   return {
@@ -790,9 +796,13 @@ function parseSilenceRanges(log: string): SilenceRange[] {
 function buildAyahTimingSegments(
   ayahs: Array<{ ayahNum: number; wordCount: number }>,
   clipDuration: number,
-  silenceRanges: SilenceRange[]
+  silenceRanges: SilenceRange[],
+  startOffset = 0
 ) {
-  if (ayahs.length === 0 || clipDuration <= 0) {
+  const effectiveStart = Math.min(Math.max(startOffset, 0), clipDuration);
+  const effectiveDuration = clipDuration - effectiveStart;
+
+  if (ayahs.length === 0 || effectiveDuration <= 0) {
     return {
       segments: [] as AyahTimingSegment[],
       source: "weighted" as const,
@@ -804,7 +814,7 @@ function buildAyahTimingSegments(
       segments: [
         {
           ayahNum: ayahs[0].ayahNum,
-          start: 0,
+          start: effectiveStart,
           end: clipDuration,
         },
       ],
@@ -815,17 +825,21 @@ function buildAyahTimingSegments(
   const internalSilences = silenceRanges
     .filter(
       (range) =>
-        range.start > SILENCE_EDGE_PADDING_SECONDS &&
+        range.start > effectiveStart + SILENCE_EDGE_PADDING_SECONDS &&
         range.end < clipDuration - SILENCE_EDGE_PADDING_SECONDS
     )
     .sort((left, right) => left.midpoint - right.midpoint);
 
   const boundaryCount = ayahs.length - 1;
-  const weightedBoundaries = buildWeightedBoundaries(ayahs, clipDuration);
+  const weightedBoundaries = buildWeightedBoundaries(
+    ayahs,
+    effectiveStart,
+    clipDuration
+  );
   const selectedSilenceMidpoints = alignSilencesToExpectedBoundaries(
     weightedBoundaries,
     internalSilences,
-    clipDuration
+    effectiveDuration
   );
   const selectedSilenceCount = selectedSilenceMidpoints.filter(
     (value): value is number => typeof value === "number"
@@ -838,6 +852,7 @@ function buildAyahTimingSegments(
         mergeBoundaryPositions(
           weightedBoundaries,
           selectedSilenceMidpoints,
+          effectiveStart,
           clipDuration
         )
       ),
@@ -850,6 +865,7 @@ function buildAyahTimingSegments(
   const boundaryPositions = mergeBoundaryPositions(
     weightedBoundaries,
     selectedSilenceMidpoints,
+    effectiveStart,
     clipDuration
   );
 
@@ -865,8 +881,11 @@ function buildAyahTimingSegments(
 function buildAyahTimingSegmentsFromTranscriptChunks(
   ayahs: Array<{ numberInSurah: number; text: string; wordCount: number }>,
   clipDuration: number,
-  transcriptChunks: TranscriptChunk[]
+  transcriptChunks: TranscriptChunk[],
+  startOffset = 0
 ) {
+  const effectiveStart = Math.min(Math.max(startOffset, 0), clipDuration);
+  const effectiveDuration = clipDuration - effectiveStart;
   const usableChunks = transcriptChunks
     .map((chunk) => {
       const normalizedText = normalizeArabicText(chunk.text);
@@ -881,10 +900,12 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
         Boolean(chunk.normalizedText) &&
         Number.isFinite(chunk.start) &&
         Number.isFinite(chunk.end) &&
-        chunk.end > chunk.start
+        chunk.end > chunk.start &&
+        chunk.end > effectiveStart &&
+        chunk.start < clipDuration
     );
 
-  if (clipDuration <= 0 || usableChunks.length < ayahs.length) {
+  if (effectiveDuration <= 0 || usableChunks.length < ayahs.length) {
     return null;
   }
 
@@ -933,7 +954,7 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
           ayahs[ayahIndex - 1].wordCount,
           totalAyahWords,
           group,
-          clipDuration,
+          effectiveDuration,
           groupScoreCache,
           `${ayahIndex - 1}:${startChunk}-${endChunk}`
         );
@@ -969,7 +990,7 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
     endChunk = startChunk;
   }
 
-  const boundaries = [0];
+  const boundaries = [effectiveStart];
 
   for (let index = 0; index < partitions.length - 1; index += 1) {
     const currentGroup = getTranscriptChunkGroup(
@@ -991,7 +1012,7 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
 
   return buildSegmentsFromBoundaries(
     ayahs.map((ayah) => ayah.numberInSurah),
-    clampBoundaryPositions(boundaries, clipDuration)
+    clampBoundaryPositions(boundaries, effectiveStart, clipDuration)
   );
 }
 
@@ -1048,18 +1069,20 @@ function scoreTranscriptChunkGroup(
 
 function buildWeightedBoundaries(
   ayahs: Array<{ ayahNum: number; wordCount: number }>,
+  startOffset: number,
   clipDuration: number
 ) {
   const totalWeight = ayahs.reduce(
     (sum, ayah) => sum + Math.max(ayah.wordCount, 1),
     0
   );
-  const boundaries = [0];
+  const boundaries = [startOffset];
+  const effectiveDuration = clipDuration - startOffset;
   let consumedWeight = 0;
 
   for (let index = 0; index < ayahs.length - 1; index += 1) {
     consumedWeight += Math.max(ayahs[index].wordCount, 1);
-    boundaries.push((consumedWeight / totalWeight) * clipDuration);
+    boundaries.push(startOffset + (consumedWeight / totalWeight) * effectiveDuration);
   }
 
   boundaries.push(clipDuration);
@@ -1069,6 +1092,7 @@ function buildWeightedBoundaries(
 function mergeBoundaryPositions(
   weightedBoundaries: number[],
   silenceMidpoints: Array<number | null>,
+  startOffset: number,
   clipDuration: number
 ) {
   const merged = [...weightedBoundaries];
@@ -1081,7 +1105,7 @@ function mergeBoundaryPositions(
     }
   }
 
-  return clampBoundaryPositions(merged, clipDuration);
+  return clampBoundaryPositions(merged, startOffset, clipDuration);
 }
 
 function alignSilencesToExpectedBoundaries(
@@ -1157,11 +1181,15 @@ function getBoundaryTolerance(
   );
 }
 
-function clampBoundaryPositions(boundaries: number[], clipDuration: number) {
+function clampBoundaryPositions(
+  boundaries: number[],
+  startOffset: number,
+  clipDuration: number
+) {
   const clamped = [...boundaries];
   const minGap = Math.min(0.18, clipDuration / Math.max(boundaries.length * 8, 1));
 
-  clamped[0] = 0;
+  clamped[0] = startOffset;
   clamped[clamped.length - 1] = clipDuration;
 
   for (let index = 1; index < clamped.length - 1; index += 1) {
@@ -1171,6 +1199,59 @@ function clampBoundaryPositions(boundaries: number[], clipDuration: number) {
   }
 
   return clamped;
+}
+
+function trimTranscriptChunksAfterTime(
+  transcriptChunks: TranscriptChunk[],
+  cutoffTime: number
+) {
+  return transcriptChunks.flatMap((chunk) => {
+    if (chunk.end <= cutoffTime) {
+      return [];
+    }
+
+    if (chunk.start >= cutoffTime) {
+      return [chunk];
+    }
+
+    const duration = chunk.end - chunk.start;
+    if (duration <= 0) {
+      return [];
+    }
+
+    const elapsedRatio = Math.min(
+      1,
+      Math.max(0, (cutoffTime - chunk.start) / duration)
+    );
+    const trimmedText = trimChunkTextByElapsedRatio(chunk.text, elapsedRatio);
+
+    if (!trimmedText) {
+      return [];
+    }
+
+    return [
+      {
+        text: trimmedText,
+        start: cutoffTime,
+        end: chunk.end,
+      },
+    ];
+  });
+}
+
+function trimChunkTextByElapsedRatio(text: string, elapsedRatio: number) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length <= 1) {
+    return elapsedRatio < 0.7 ? text.trim() : "";
+  }
+
+  const dropCount = Math.min(
+    words.length - 1,
+    Math.max(0, Math.round(words.length * elapsedRatio))
+  );
+
+  return words.slice(dropCount).join(" ").trim();
 }
 
 function buildSegmentsFromBoundaries(
