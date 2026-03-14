@@ -36,7 +36,11 @@ export function buildSubtitlesFromAyahRange(
     return prefixSubtitles;
   }
 
-  if (options.detectedTimings?.length === ayahRange.length) {
+  if (
+    options.detectedTimings &&
+    options.detectedTimings.length > 0 &&
+    options.detectedTimings.length >= ayahRange.length
+  ) {
     const timingByAyah = new Map(
       options.detectedTimings.map((timing) => [timing.ayahNum, timing])
     );

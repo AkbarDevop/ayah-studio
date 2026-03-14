@@ -273,7 +273,43 @@ function scoreMatch(
     score += 0.06;
   }
 
+  // For short ayahs (2-4 words), add word-sequence bonus to discriminate
+  // between ayahs that share common Arabic tokens but differ in order
+  const candidateWordCount = countWords(candidate);
+  if (candidateWordCount >= 2 && candidateWordCount <= 4) {
+    const seqScore = wordSequenceSimilarity(transcript, candidate);
+    score = score * 0.88 + seqScore * 0.12;
+  }
+
   return Math.min(1, Math.max(0, score));
+}
+
+/**
+ * Compute word-level sequence similarity using longest common subsequence ratio.
+ * Helps distinguish short ayahs that share the same words in different orders.
+ */
+function wordSequenceSimilarity(left: string, right: string): number {
+  const leftWords = left.split(" ").filter(Boolean);
+  const rightWords = right.split(" ").filter(Boolean);
+  if (leftWords.length === 0 || rightWords.length === 0) return 0;
+
+  // LCS via DP (fine for short word arrays)
+  const dp = Array.from({ length: leftWords.length + 1 }, () =>
+    new Array(rightWords.length + 1).fill(0) as number[]
+  );
+
+  for (let i = 1; i <= leftWords.length; i += 1) {
+    for (let j = 1; j <= rightWords.length; j += 1) {
+      if (leftWords[i - 1] === rightWords[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  const lcsLength = dp[leftWords.length][rightWords.length];
+  return (2 * lcsLength) / (leftWords.length + rightWords.length);
 }
 
 function scoreCandidateAgainstTranscriptVariants(
@@ -342,12 +378,9 @@ function buildMatchingTextVariants(input: string): MatchingTextVariant[] {
 
 export function stripLeadingIstiadha(input: string) {
   for (const variant of ISTIADHA_MATCH_TEXTS) {
-    if (input === variant) {
-      return "";
-    }
-
-    if (input.startsWith(`${variant} `)) {
-      return input.slice(variant.length).trim();
+    const result = stripLeadingPhraseExactOrFuzzy(input, variant);
+    if (result !== input) {
+      return result;
     }
   }
 
@@ -355,36 +388,69 @@ export function stripLeadingIstiadha(input: string) {
 }
 
 export function stripLeadingBasmala(input: string) {
-  if (input === BASMALA_MATCH_TEXT) {
-    return "";
-  }
-
-  if (input.startsWith(`${BASMALA_MATCH_TEXT} `)) {
-    return input.slice(BASMALA_MATCH_TEXT.length).trim();
-  }
-
-  return input;
+  return stripLeadingPhraseExactOrFuzzy(input, BASMALA_MATCH_TEXT);
 }
 
 export function stripLeadingFatiha(input: string) {
-  if (input === FATIHA_MATCH_TEXT) {
-    return "";
-  }
-
-  if (input.startsWith(`${FATIHA_MATCH_TEXT} `)) {
-    return input.slice(FATIHA_MATCH_TEXT.length).trim();
-  }
-
-  return input;
+  return stripLeadingPhraseExactOrFuzzy(input, FATIHA_MATCH_TEXT);
 }
 
 export function stripLeadingAmeen(input: string) {
-  if (input === AMEEN_MATCH_TEXT) {
+  return stripLeadingPhraseExactOrFuzzy(input, AMEEN_MATCH_TEXT);
+}
+
+/**
+ * Try exact prefix stripping first. If that fails, try fuzzy prefix stripping
+ * using word-level Dice scoring of the leading N words against the phrase.
+ * This handles Whisper ASR garbling (e.g. one word slightly wrong).
+ */
+function stripLeadingPhraseExactOrFuzzy(
+  input: string,
+  phrase: string
+): string {
+  // Exact match
+  if (input === phrase) {
     return "";
   }
+  if (input.startsWith(`${phrase} `)) {
+    return input.slice(phrase.length).trim();
+  }
 
-  if (input.startsWith(`${AMEEN_MATCH_TEXT} `)) {
-    return input.slice(AMEEN_MATCH_TEXT.length).trim();
+  // Fuzzy match: check if leading words closely match the phrase
+  const phraseWordCount = countWords(phrase);
+  if (phraseWordCount < 2) {
+    // For single-word phrases (like "ameen"), only do exact match
+    return input;
+  }
+
+  const inputWords = input.split(" ").filter(Boolean);
+  if (inputWords.length < phraseWordCount) {
+    return input;
+  }
+
+  // Try window sizes: exact count first, then +/-1, pick the best scoring window
+  const windowSizes = [
+    phraseWordCount,
+    phraseWordCount + 1,
+    phraseWordCount - 1,
+  ].filter((size) => size >= 2 && size <= inputWords.length);
+
+  let bestWindow: { size: number; score: number } | null = null;
+  const phraseBigrams = buildBigrams(phrase);
+
+  for (const windowSize of windowSizes) {
+    const candidate = inputWords.slice(0, windowSize).join(" ");
+    const candidateBigrams = buildBigrams(candidate);
+    const score = diceCoefficient(phraseBigrams, candidateBigrams);
+
+    if (score >= 0.78 && (!bestWindow || score > bestWindow.score)) {
+      bestWindow = { size: windowSize, score };
+    }
+  }
+
+  if (bestWindow) {
+    const remainder = inputWords.slice(bestWindow.size).join(" ").trim();
+    return remainder;
   }
 
   return input;
@@ -516,24 +582,27 @@ function setOverlapRatio(left: Set<string>, right: Set<string>): number {
     }
   }
 
-  return overlap / Math.max(left.size, right.size);
+  return overlap / Math.min(left.size, right.size);
 }
 
 function prefixSimilarity(left: string, right: string): number {
-  const maxLength = Math.min(left.length, right.length, 42);
-  if (maxLength === 0) {
+  const compareLength = Math.min(left.length, right.length, 42);
+  if (compareLength === 0) {
     return 0;
   }
 
   let matchingChars = 0;
-  for (let index = 0; index < maxLength; index += 1) {
+  for (let index = 0; index < compareLength; index += 1) {
     if (left[index] !== right[index]) {
       break;
     }
     matchingChars += 1;
   }
 
-  return matchingChars / maxLength;
+  // Normalize against the longer string (capped at 42) to avoid overstating
+  // prefix similarity when comparing a short candidate against a long transcript
+  const denominator = Math.min(Math.max(left.length, right.length), 42);
+  return matchingChars / denominator;
 }
 
 function countWords(input: string): number {

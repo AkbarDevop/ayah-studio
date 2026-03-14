@@ -18,8 +18,42 @@ export function normalizeSubtitleTiming(subtitle: Subtitle): Subtitle {
   };
 }
 
+/**
+ * Normalize all subtitles and fix overlaps between consecutive entries.
+ * If subtitle B starts before subtitle A ends, clamp A's end to B's start
+ * (preserving a minimum duration for A).
+ */
 export function normalizeSubtitleTimings(subtitles: Subtitle[]): Subtitle[] {
-  return subtitles.map(normalizeSubtitleTiming);
+  const normalized = subtitles.map(normalizeSubtitleTiming);
+
+  for (let i = 0; i < normalized.length - 1; i += 1) {
+    const current = normalized[i];
+    const next = normalized[i + 1];
+
+    if (current.end > next.start) {
+      // Resolve overlap: clamp current end to next start, but ensure minimum duration
+      const clampedEnd = Math.max(
+        current.start + MIN_SUBTITLE_DURATION_SECONDS,
+        next.start
+      );
+      normalized[i] = {
+        ...current,
+        end: roundTiming(clampedEnd),
+      };
+
+      // If clamping still leaves overlap (because next.start < current.start + min),
+      // push next's start forward
+      if (clampedEnd > next.start) {
+        normalized[i + 1] = {
+          ...next,
+          start: roundTiming(clampedEnd),
+          end: roundTiming(Math.max(clampedEnd + MIN_SUBTITLE_DURATION_SECONDS, next.end)),
+        };
+      }
+    }
+  }
+
+  return normalized;
 }
 
 function sanitizeFiniteNumber(value: number) {
