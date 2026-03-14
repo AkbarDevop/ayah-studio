@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Clock, CheckSquare, XSquare, Sparkles } from "lucide-react";
+import { ArrowLeft, Clock, CheckSquare, XSquare, Sparkles, Info } from "lucide-react";
 import type { Ayah, TranslationAyah } from "@/types";
 import AyahCard from "./ayah-card";
 
@@ -34,13 +34,14 @@ export default function AyahSelector({
   const selectedCount = selectedIndices.size;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col animate-fade-in">
       {/* Header: Back + Surah Name */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--text)]"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-alt)] hover:text-[var(--text)] active:scale-[0.97]"
+          aria-label="Back to surah list"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
@@ -53,12 +54,19 @@ export default function AyahSelector({
 
       {/* Duration Setting */}
       <div className="px-4 py-2">
-        <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+        <div
+          className="tooltip-trigger flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 transition-colors duration-200 focus-within:border-[var(--gold-dim)]"
+          data-tooltip="Default seconds per ayah when no audio is detected"
+        >
           <Clock className="h-4 w-4 shrink-0 text-[var(--text-dim)]" />
-          <label className="font-mono-ui shrink-0 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)]">
+          <label
+            htmlFor="duration-input"
+            className="font-mono-ui shrink-0 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)]"
+          >
             Sec / Ayah
           </label>
           <input
+            id="duration-input"
             type="number"
             min={3}
             max={30}
@@ -69,7 +77,7 @@ export default function AyahSelector({
                 onDurationChange(Math.min(30, Math.max(3, val)));
               }
             }}
-            className="font-mono-ui w-16 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-1 text-center text-sm text-[var(--text)] focus:border-[var(--gold-dim)] focus:outline-none"
+            className="font-mono-ui w-16 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-1 text-center text-sm text-[var(--text)] transition-colors duration-200 focus:border-[var(--gold-dim)] focus:outline-none"
           />
           <span className="font-mono-ui text-[11px] text-[var(--text-dim)]">
             seconds
@@ -83,7 +91,8 @@ export default function AyahSelector({
         <button
           type="button"
           onClick={selectedCount === ayahs.length ? onDeselectAll : onSelectAll}
-          className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"
+          className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-all duration-200 hover:border-[var(--border-light)] hover:text-[var(--text)] active:scale-[0.97]"
+          aria-label={selectedCount === ayahs.length ? "Deselect all ayahs" : "Select all ayahs"}
         >
           {selectedCount === ayahs.length ? (
             <>
@@ -103,9 +112,14 @@ export default function AyahSelector({
           type="button"
           onClick={onGenerate}
           disabled={selectedCount === 0}
-          className={`ml-auto flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+          aria-label={
             selectedCount > 0
-              ? "bg-[var(--gold)] text-[var(--bg)] shadow-lg shadow-[var(--gold)]/20 hover:bg-[var(--gold-light)] active:scale-[0.98]"
+              ? `Generate subtitles for ${selectedCount} ayahs`
+              : "Select ayahs to generate subtitles"
+          }
+          className={`ml-auto flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+            selectedCount > 0
+              ? "bg-[var(--gold)] text-[var(--bg)] shadow-lg shadow-[var(--gold)]/20 hover:bg-[var(--gold-light)] active:scale-[0.98] animate-pulse-gold"
               : "bg-[var(--border)] text-[var(--text-dim)] cursor-not-allowed"
           }`}
         >
@@ -119,12 +133,18 @@ export default function AyahSelector({
         </button>
       </div>
 
-      {/* Ayah Count */}
-      <div className="px-4 py-1">
+      {/* Ayah Count + hint */}
+      <div className="px-4 py-1 flex items-center justify-between">
         <span className="font-mono-ui text-[11px] uppercase tracking-wider text-[var(--text-dim)]">
           {selectedCount} of {ayahs.length} ayah
           {ayahs.length !== 1 ? "s" : ""} selected
         </span>
+        {selectedCount === 0 && (
+          <span className="flex items-center gap-1 text-[11px] text-[var(--text-dim)] animate-fade-in">
+            <Info className="h-3 w-3" />
+            Tap ayahs to select
+          </span>
+        )}
       </div>
 
       {/* Ayah List */}

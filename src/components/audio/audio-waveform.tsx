@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Music, Volume2, VolumeX } from "lucide-react";
 
 interface WaveSurferLike {
   destroy: () => void;
@@ -199,17 +200,28 @@ export default function AudioWaveform({
   }, [audioSrc, onPlayingChange, playing, waveReady]);
 
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] transition-colors duration-200">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-        <div>
-          <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
-            Audio Waveform
-          </p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {audioName
-              ? audioName
-              : "Upload a clip and its audio track will appear here automatically."}
-          </p>
+        <div className="flex items-center gap-3">
+          <div className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-200 ${
+            audioSrc ? "bg-[var(--gold)]/10" : "bg-[var(--surface-alt)]"
+          }`}>
+            {audioSrc ? (
+              <Volume2 className="h-4 w-4 text-[var(--gold)]" />
+            ) : (
+              <VolumeX className="h-4 w-4 text-[var(--text-dim)]" />
+            )}
+          </div>
+          <div>
+            <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
+              Audio Waveform
+            </p>
+            <p className="mt-0.5 text-sm text-[var(--text-muted)]">
+              {audioName
+                ? audioName
+                : "Upload a clip and its audio track will appear here."}
+            </p>
+          </div>
         </div>
         <div className="text-right">
           <p className="font-mono-ui text-xs uppercase tracking-[0.12em] text-[var(--gold)]">
@@ -229,11 +241,13 @@ export default function AudioWaveform({
 
       <div className="relative px-4 py-4">
         {!audioSrc && (
-          <div className="flex h-[120px] items-center justify-center rounded-lg border border-dashed border-[var(--border-light)] bg-[var(--surface-alt)]/60 px-6 text-center">
-            <p className="max-w-lg text-sm leading-relaxed text-[var(--text-dim)]">
+          <div className="animate-fade-in flex h-[120px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[var(--border-light)] bg-[var(--surface-alt)]/60 px-6 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-light)] bg-[var(--surface)]">
+              <Music className="h-4 w-4 text-[var(--text-dim)]" />
+            </div>
+            <p className="max-w-md text-xs leading-relaxed text-[var(--text-dim)]">
               Upload a reciter clip and Ayah Studio will use its built-in audio
-              track automatically. If the clip audio is noisy or edited, you can
-              still provide a separate override track later.
+              track automatically. You can also provide a separate audio override.
             </p>
           </div>
         )}
@@ -242,14 +256,16 @@ export default function AudioWaveform({
           ref={containerRef}
           className={
             audioSrc
-              ? "rounded-lg border border-[var(--border)] bg-[var(--surface-alt)]/80 px-2 py-3"
+              ? "rounded-lg border border-[var(--border)] bg-[var(--surface-alt)]/80 px-2 py-3 transition-opacity duration-300"
               : "hidden"
           }
+          style={{ opacity: waveReady ? 1 : 0.4 }}
         />
 
         {audioSrc && loading && (
-          <div className="absolute inset-x-4 bottom-4 top-4 flex items-center justify-center rounded-lg bg-black/35">
-            <div className="glass-overlay rounded-full px-4 py-2">
+          <div className="absolute inset-x-4 bottom-4 top-4 flex items-center justify-center rounded-lg bg-black/35 animate-fade-in">
+            <div className="glass-overlay flex items-center gap-3 rounded-full px-5 py-2.5">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
               <p className="font-mono-ui text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
                 Decoding waveform...
               </p>
