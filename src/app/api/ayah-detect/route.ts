@@ -96,6 +96,19 @@ export async function POST(request: Request) {
       outputPath,
       token
     );
+
+    // Early bail if the transcript is garbage (no usable Arabic content)
+    const normalizedFull = normalizeArabicText(transcript);
+    if (isGarbageTranscript(normalizedFull)) {
+      return NextResponse.json({
+        provider,
+        transcript,
+        matches: [],
+        warning:
+          "The transcription did not produce enough recognizable Arabic text. Try a cleaner recording with less background noise, or use override audio.",
+      });
+    }
+
     const transcriptChunks =
       chunks.length > 0
         ? chunks
@@ -616,6 +629,9 @@ function buildSpeechSegments(
         start: cursor,
         end: silence.start,
       });
+    } else if (silence.start > cursor && speechSegments.length > 0) {
+      // Merge short fragments into the previous segment instead of dropping them
+      speechSegments[speechSegments.length - 1].end = silence.start;
     }
 
     cursor = Math.max(cursor, silence.end);
@@ -626,6 +642,9 @@ function buildSpeechSegments(
       start: cursor,
       end: clipDuration,
     });
+  } else if (clipDuration > cursor && speechSegments.length > 0) {
+    // Merge trailing short fragment into previous segment
+    speechSegments[speechSegments.length - 1].end = clipDuration;
   }
 
   return mergeSegmentsDownToLimit(
@@ -1724,7 +1743,7 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
           `${ayahIndex - 1}:${startChunk}-${endChunk}`
         );
 
-        if (groupScore < 0.16) {
+        if (groupScore < 0.22) {
           continue;
         }
 
@@ -1738,7 +1757,7 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
   }
 
   const finalScore = dp[ayahs.length][usableChunks.length];
-  if (!Number.isFinite(finalScore) || finalScore / ayahs.length < 0.34) {
+  if (!Number.isFinite(finalScore) || finalScore / ayahs.length < 0.38) {
     return null;
   }
 
@@ -1964,10 +1983,22 @@ function clampBoundaryPositions(
   clamped[0] = startOffset;
   clamped[clamped.length - 1] = clipDuration;
 
+  // Forward pass: ensure each boundary is at least minGap after the previous
   for (let index = 1; index < clamped.length - 1; index += 1) {
     const previous = clamped[index - 1] + minGap;
     const next = clamped[index + 1] - minGap;
     clamped[index] = Math.min(next, Math.max(previous, clamped[index]));
+  }
+
+  // Backward pass: fix any remaining inversions caused by forward cascade
+  for (let index = clamped.length - 2; index >= 1; index -= 1) {
+    if (clamped[index] >= clamped[index + 1]) {
+      clamped[index] = clamped[index + 1] - minGap;
+    }
+    if (clamped[index] <= clamped[index - 1]) {
+      // If we still can't satisfy the gap, distribute evenly between neighbors
+      clamped[index] = (clamped[index - 1] + clamped[index + 1]) / 2;
+    }
   }
 
   return clamped;
@@ -2053,16 +2084,33 @@ function buildSegmentsFromTranscriptGroups(
   let previousEnd = startOffset;
 
   for (let index = 0; index < groups.length; index += 1) {
+    const isLast = index === groups.length - 1;
     const group = groups[index];
     const nextGroup = groups[index + 1];
-    const rawStart = Math.max(startOffset, group.start - edgePadding);
-    const rawEnd = Math.min(
-      clipDuration,
-      group.end + edgePadding,
-      nextGroup ? nextGroup.start - edgePadding : clipDuration
-    );
 
+    // For start: use previous segment's end to eliminate gaps.
+    // Only use group.start - padding if it's >= previousEnd (no gap).
+    const rawStart = Math.max(startOffset, group.start - edgePadding);
     const start = Math.max(previousEnd, rawStart);
+
+    // For end: if there's a gap to the next group, split it at the midpoint
+    // instead of leaving a dead zone between segments
+    let rawEnd: number;
+    if (isLast) {
+      // Last segment extends to clip end
+      rawEnd = clipDuration;
+    } else if (nextGroup) {
+      const gapBetweenGroups = nextGroup.start - group.end;
+      if (gapBetweenGroups > 0) {
+        // Split the gap at its midpoint so no timing is unaccounted for
+        rawEnd = Math.min(clipDuration, group.end + gapBetweenGroups / 2);
+      } else {
+        rawEnd = Math.min(clipDuration, group.end + edgePadding, nextGroup.start - edgePadding);
+      }
+    } else {
+      rawEnd = Math.min(clipDuration, group.end + edgePadding);
+    }
+
     const end = Math.max(start + minDuration, rawEnd);
 
     if (!Number.isFinite(start) || !Number.isFinite(end) || end > clipDuration + 0.001) {
@@ -2092,6 +2140,25 @@ function getWavDurationSeconds(audioBuffer: Buffer) {
 
 function countWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Detect garbage transcripts -- those with no meaningful Arabic content.
+ * Returns true if the normalized transcript has fewer than 2 words or is
+ * composed entirely of very short fragments that don't form coherent text.
+ */
+function isGarbageTranscript(normalizedText: string): boolean {
+  if (!normalizedText) return true;
+
+  const wordCount = countWords(normalizedText);
+  if (wordCount < 2) return true;
+
+  // Check if the text contains enough Arabic characters
+  // (after normalization, non-Arabic chars are stripped to spaces)
+  const arabicCharCount = normalizedText.replace(/\s/g, "").length;
+  if (arabicCharCount < 4) return true;
+
+  return false;
 }
 
 async function resolveHuggingFaceToken() {

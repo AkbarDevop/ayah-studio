@@ -1,4 +1,8 @@
-@import "tailwindcss";
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/preflight" layer(base);
+@import "tailwindcss/utilities" layer(utilities) source(none);
+@source "../**/*.{ts,tsx}";
 
 @theme inline {
   --color-background: var(--bg);
@@ -292,6 +296,119 @@ body {
   font-family: var(--font-arabic), serif;
 }
 
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus-visible ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Fade-in animation for panel content */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212, 168, 83, 0.25); }
+  50% { box-shadow: 0 0 0 8px rgba(212, 168, 83, 0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 250ms ease-out both;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 280ms ease-out both;
+}
+
+.animate-slide-down {
+  animation: slideDown 200ms ease-out both;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 250ms ease-out both;
+}
+
+.animate-pulse-gold {
+  animation: pulse-gold 2s ease-in-out infinite;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-alt) 25%,
+    var(--border) 50%,
+    var(--surface-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Tooltip utility */
+.tooltip-trigger {
+  position: relative;
+}
+
+.tooltip-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.92);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border-light);
+  color: var(--text);
+  font-family: var(--font-ibm-plex), monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease, transform 150ms ease;
+  z-index: 50;
+}
+
+.tooltip-trigger:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
 /* Custom scrollbar for the dark theme */
 ::-webkit-scrollbar {
   width: 6px;
@@ -305,4 +422,32 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
+}
+
+/* Mobile-specific improvements */
+@media (max-width: 768px) {
+  .studio-panel,
+  .studio-panel-soft {
+    border-radius: 0.875rem;
+  }
+
+  .preview-stage-frame {
+    border-radius: 0.75rem;
+  }
+
+  .metric-pill {
+    font-size: 0.58rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .animate-fade-in,
+  .animate-fade-in-scale,
+  .animate-slide-down,
+  .animate-slide-in-right { animation: none; }
+  .animate-pulse-gold { animation: none; }
+  .skeleton-shimmer { animation: none; }
 }

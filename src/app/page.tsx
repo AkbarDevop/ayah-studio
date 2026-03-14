@@ -388,10 +388,10 @@ export default function Home() {
   /* ------------------------------------------------------------------ */
   return (
     <div className="studio-shell flex min-h-screen flex-col">
-      <header className="border-b border-[var(--border)]/80 bg-[rgba(12,15,20,0.8)] backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-[1800px] flex-wrap items-center justify-between gap-4 px-5 py-4">
+      <header className="sticky top-0 z-40 border-b border-[var(--border)]/80 bg-[rgba(12,15,20,0.85)] backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[1800px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex items-center gap-3">
-            <div className="text-[var(--gold)]">
+            <div className="text-[var(--gold)]" aria-hidden="true">
               <svg width="30" height="30" viewBox="0 0 30 30">
                 <circle
                   cx="15"
@@ -432,71 +432,75 @@ export default function Home() {
             </div>
 
             <div>
-              <h1 className="text-[24px] font-semibold leading-tight text-[var(--gold)]">
+              <h1 className="text-xl font-semibold leading-tight text-[var(--gold)] sm:text-[24px]">
                 Ayah Studio
               </h1>
-              <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-[family-name:var(--font-ibm-plex)]">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-[family-name:var(--font-ibm-plex)] sm:text-[11px]">
                 Quran video editor
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="metric-pill">{activeRatioOption.label}</span>
-            <span className="metric-pill">{detectionProviderLabel}</span>
+          <nav className="flex flex-wrap items-center justify-end gap-2" aria-label="Status and actions">
+            <span className="metric-pill hidden sm:inline-flex">{activeRatioOption.label}</span>
+            <span className="metric-pill hidden sm:inline-flex">{detectionProviderLabel}</span>
             {subtitlesState.subtitles.length > 0 && (
               <button
                 type="button"
                 onClick={() => subtitlesState.setShowExport(true)}
-                className="flex items-center gap-2 rounded-xl bg-[var(--gold)] px-4 py-2.5 text-sm font-semibold text-[var(--bg)] shadow-[0_16px_34px_rgba(212,168,83,0.22)] transition-all hover:bg-[var(--gold-light)] active:scale-[0.98]"
+                className="flex items-center gap-2 rounded-xl bg-[var(--gold)] px-3.5 py-2 text-sm font-semibold text-[var(--bg)] shadow-[0_16px_34px_rgba(212,168,83,0.22)] transition-all duration-200 hover:bg-[var(--gold-light)] active:scale-[0.98] sm:px-4 sm:py-2.5"
+                aria-label={`Export ${subtitlesState.subtitles.length} subtitles`}
               >
                 <Download className="h-4 w-4" />
                 <span>Export</span>
               </button>
             )}
-          </div>
+          </nav>
         </div>
       </header>
 
-      <div className="flex-1 overflow-hidden px-4 pb-4 pt-4">
+      <div className="flex-1 overflow-hidden px-3 pb-4 pt-4 sm:px-4">
         <div className="mx-auto grid h-full max-w-[1800px] gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="studio-panel flex min-h-0 flex-col overflow-hidden">
-            <div className="border-b border-[var(--border)]/80 p-4">
-              <div className="rounded-[1.1rem] border border-[var(--border)]/55 bg-black/5 p-4">
-                <div className="mt-3 flex items-start justify-between gap-3">
+          <aside className="studio-panel flex min-h-0 flex-col overflow-hidden max-xl:max-h-[50vh]">
+            <div className="border-b border-[var(--border)]/80 p-3 sm:p-4">
+              <div className="rounded-[1.1rem] border border-[var(--border)]/55 bg-black/5 p-3 sm:p-4">
+                <div className="mt-2 flex items-start justify-between gap-3 sm:mt-3">
                   <div>
                     <h2 className="text-base font-semibold text-[var(--text)]">
                       Library
                     </h2>
-                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)] sm:mt-1 sm:text-sm">
                       Browse ayahs, blocks, and styling.
                     </p>
                   </div>
                   <span className="metric-pill">
-                    {quran.selectedSurah?.englishName ?? "No Surah Loaded"}
+                    {quran.selectedSurah?.englishName ?? "No Surah"}
                   </span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-alt)]/60 p-1">
+                <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-alt)]/60 p-1 sm:mt-4 sm:gap-2" role="tablist" aria-label="Library sections">
                   {tabs.map(({ id, label, icon: Icon }) => (
                     <button
                       key={id}
                       type="button"
+                      role="tab"
+                      aria-selected={subtitlesState.tab === id}
+                      aria-controls={`tabpanel-${id}`}
                       onClick={() => subtitlesState.setTab(id)}
                       className={[
-                        "flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] transition-colors font-[family-name:var(--font-ibm-plex)]",
+                        "flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[10px] font-medium uppercase tracking-[0.14em] transition-all duration-200 font-[family-name:var(--font-ibm-plex)] sm:px-3 sm:py-2.5 sm:text-[11px]",
                         subtitlesState.tab === id
                           ? "bg-[var(--gold)] text-[var(--bg)] shadow-[0_12px_30px_rgba(212,168,83,0.22)]"
                           : "text-[var(--text-muted)] hover:bg-black/15 hover:text-[var(--text)]",
                       ].join(" ")}
                     >
                       <Icon className="h-3.5 w-3.5" />
-                      <span>{label}</span>
+                      <span className="hidden sm:inline">{label}</span>
                     </button>
                   ))}
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2 sm:mt-4">
                   <span className="metric-pill">{selectedAyahCount} selected</span>
                   <span className="metric-pill">
                     {subtitlesState.subtitles.length} blocks
@@ -505,17 +509,20 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4" role="tabpanel" id={`tabpanel-${subtitlesState.tab}`}>
               {subtitlesState.tab === "browse" && (
                 <>
                   {quran.loading && (
-                    <div className="flex items-center justify-center py-16">
+                    <div className="animate-fade-in flex flex-col items-center justify-center gap-3 py-16">
                       <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
+                      <p className="font-mono-ui text-[11px] uppercase tracking-wider text-[var(--text-dim)]">
+                        Loading surah data...
+                      </p>
                     </div>
                   )}
 
                   {quran.error && (
-                    <div className="mb-4 rounded-xl border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
+                    <div className="animate-fade-in mb-4 rounded-xl border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
                       {quran.error}
                     </div>
                   )}
@@ -550,16 +557,26 @@ export default function Home() {
               )}
 
               {subtitlesState.tab === "subtitles" && (
-                <div className="p-1">
+                <div className="animate-fade-in p-1">
                   {subtitlesState.subtitles.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <Layers className="mb-3 h-8 w-8 text-[var(--text-dim)]" />
-                      <p className="text-sm text-[var(--text-muted)]">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-[var(--border-light)] bg-[var(--surface)]">
+                        <Layers className="h-6 w-6 text-[var(--text-dim)]" />
+                      </div>
+                      <p className="text-sm font-medium text-[var(--text-muted)]">
                         No subtitles yet
                       </p>
-                      <p className="mt-1 text-xs text-[var(--text-dim)]">
-                        Browse a surah and generate subtitles
+                      <p className="mt-1.5 max-w-[220px] text-xs leading-relaxed text-[var(--text-dim)]">
+                        Browse a surah, select ayahs, then hit Generate to create timed subtitle blocks.
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => subtitlesState.setTab("browse")}
+                        className="mt-4 flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-all duration-200 hover:border-[var(--gold-dim)] hover:text-[var(--gold)]"
+                      >
+                        <BookOpen className="h-3 w-3" />
+                        Browse Surahs
+                      </button>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -575,11 +592,12 @@ export default function Home() {
                             subtitlesState.setSelectedSubIdx(idx);
                             setCurrentTime(sub.start);
                           }}
+                          aria-label={`Edit ${sub.label ?? `Ayah ${sub.ayahNum}`}, ${sub.start.toFixed(1)}s to ${sub.end.toFixed(1)}s`}
                           className={[
-                            "w-full rounded-2xl border p-3 text-left transition-all",
+                            "w-full rounded-2xl border p-3 text-left transition-all duration-200 active:scale-[0.99]",
                             subtitlesState.selectedSubIdx === idx
                               ? "border-[var(--gold-dim)] bg-[var(--surface-alt)] shadow-[0_14px_34px_rgba(212,168,83,0.08)]"
-                              : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
+                              : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)] hover:bg-[var(--surface-alt)]/50",
                           ].join(" ")}
                         >
                           <div className="flex items-center justify-between">
@@ -608,7 +626,7 @@ export default function Home() {
               )}
 
               {subtitlesState.tab === "style" && (
-                <div className="p-1">
+                <div className="animate-fade-in p-1">
                   <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--text-dim)] font-[family-name:var(--font-ibm-plex)]">
                     Subtitle Style
                   </p>
@@ -621,8 +639,9 @@ export default function Home() {
                           key={style.id}
                           type="button"
                           onClick={() => subtitlesState.setSubtitleStyle(style.id)}
+                          aria-pressed={isActive}
                           className={[
-                            "w-full rounded-2xl border p-3 text-left transition-all",
+                            "w-full rounded-2xl border p-3 text-left transition-all duration-200 active:scale-[0.99]",
                             isActive
                               ? "border-[var(--gold-dim)] bg-[var(--surface-alt)] shadow-[0_14px_34px_rgba(212,168,83,0.08)]"
                               : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-light)]",
@@ -1001,10 +1020,10 @@ export default function Home() {
             </div>
           </aside>
 
-          <main className="min-h-0 overflow-y-auto pr-1">
+          <main className="min-h-0 overflow-y-auto pr-1" role="main">
             <div className="space-y-4 pb-1">
-              <section className="studio-panel-soft flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                <div className="flex flex-wrap gap-2">
+              <section className="studio-panel-soft flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3" aria-label="Project status">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
                   <span className="metric-pill">
                     {hasMedia ? "Source Ready" : "No Source"}
                   </span>
@@ -1014,7 +1033,7 @@ export default function Home() {
                   <span className="metric-pill">
                     {subtitlesState.subtitles.length} blocks
                   </span>
-                  <span className="metric-pill">{activeSubtitleStyle}</span>
+                  <span className="metric-pill hidden sm:inline-flex">{activeSubtitleStyle}</span>
                 </div>
                 {appliedDetection && (
                   <span className="metric-pill">
@@ -1028,12 +1047,15 @@ export default function Home() {
 
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
                 <div className="min-h-0 space-y-4">
-                  <section className="studio-panel p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
+                  <section className="studio-panel p-3 sm:p-4" aria-label="Source media">
+                    <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
                       <div>
                         <h2 className="text-base font-semibold text-[var(--text)]">
                           Source
                         </h2>
+                        <p className="mt-0.5 text-xs text-[var(--text-dim)]">
+                          Upload video or audio for your recitation
+                        </p>
                       </div>
                       <span className="metric-pill">Auto-detect on upload</span>
                     </div>
@@ -1053,7 +1075,7 @@ export default function Home() {
                       onChange={media.handleAudioUpload}
                     />
 
-                    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_320px]">
+                    <div className="mt-3 grid gap-3 sm:mt-4 sm:gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_320px]">
                       <div className="studio-panel-soft p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -1075,7 +1097,8 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => media.videoInputRef.current?.click()}
-                            className="flex items-center gap-2 rounded-xl bg-[var(--gold)] px-3.5 py-2.5 text-sm font-semibold text-[var(--bg)] transition-colors hover:bg-[var(--gold-light)]"
+                            className="flex items-center gap-2 rounded-xl bg-[var(--gold)] px-3.5 py-2.5 text-sm font-semibold text-[var(--bg)] transition-all duration-200 hover:bg-[var(--gold-light)] active:scale-[0.97]"
+                            aria-label={media.videoSrc ? "Replace video clip" : "Upload video clip"}
                           >
                             <Upload className="h-4 w-4" />
                             <span>
@@ -1242,18 +1265,18 @@ export default function Home() {
                     </div>
                   </section>
 
-                  <section className="studio-panel p-4">
-                    <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+                  <section className="studio-panel p-3 sm:p-4" aria-label="Video preview">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3 sm:mb-4 sm:gap-4">
                       <div>
                         <h2 className="text-base font-semibold text-[var(--text)]">
                           Preview
                         </h2>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         <span className="metric-pill">
                           {activeRatioOption.label} · {activeRatioOption.hint}
                         </span>
-                        <span className="metric-pill">
+                        <span className={`metric-pill ${playing ? "!border-[var(--emerald)]/50 !text-[var(--emerald-light)]" : ""}`}>
                           {playing ? "Playing" : "Paused"}
                         </span>
                         {previewSubtitle && (
@@ -1300,15 +1323,15 @@ export default function Home() {
                     onAudioError={media.setAudioError}
                   />
 
-                  <section className="studio-panel-soft p-4">
-                    <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
+                  <section className="studio-panel-soft p-3 sm:p-4" aria-label="Timeline">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
                       <div>
                         <h3 className="text-base font-semibold text-[var(--text)]">
                           Timeline
                         </h3>
                       </div>
                       <p className="max-w-xs text-right text-xs text-[var(--text-dim)]">
-                        Drag edges or snap to playhead.
+                        Click to seek. Drag block edges to resize. Arrow keys for fine-tuning.
                       </p>
                     </div>
 
@@ -1328,8 +1351,8 @@ export default function Home() {
                 </div>
 
                 <div className="min-h-0 space-y-4">
-                  <section className="studio-panel p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
+                  <section className="studio-panel p-3 sm:p-4" aria-label="Ayah detection">
+                    <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
                       <div className="min-w-0 flex-1">
                         <h2 className="text-base font-semibold text-[var(--text)]">
                           Ayah Detection
@@ -1348,14 +1371,15 @@ export default function Home() {
                         type="button"
                         onClick={handleDetectAyahs}
                         disabled={!detectionSourceFile || detection.detectingAyahs}
+                        aria-label={detection.detectingAyahs ? "Detection in progress" : "Re-run ayah detection"}
                         className={[
-                          "flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors",
+                          "flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200",
                           detectionSourceFile && !detection.detectingAyahs
-                            ? "bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-light)]"
+                            ? "bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-light)] active:scale-[0.97]"
                             : "cursor-not-allowed bg-[var(--border)] text-[var(--text-dim)]",
                         ].join(" ")}
                       >
-                        <Sparkles className="h-4 w-4" />
+                        <Sparkles className={`h-4 w-4 ${detection.detectingAyahs ? "animate-spin" : ""}`} />
                         <span>
                           {detection.detectingAyahs
                             ? "Detecting..."
@@ -1516,15 +1540,22 @@ export default function Home() {
                       }
                     />
                   ) : (
-                    <section className="studio-panel-soft px-5 py-6">
-                      <h3 className="text-base font-semibold text-[var(--text)]">
-                        Inspector
-                      </h3>
-                      <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
-                        {subtitlesState.subtitles.length > 0
-                          ? "Select a subtitle on the timeline or sidebar to edit timing and text."
-                          : "Generate subtitles first, then use the inspector for timing and wording cleanup."}
-                      </p>
+                    <section className="studio-panel-soft px-4 py-5 sm:px-5 sm:py-6" aria-label="Subtitle inspector">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-dashed border-[var(--border-light)] bg-[var(--surface)]">
+                          <Layers className="h-4 w-4 text-[var(--text-dim)]" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-semibold text-[var(--text)]">
+                            Inspector
+                          </h3>
+                          <p className="mt-1.5 text-sm leading-relaxed text-[var(--text-muted)]">
+                            {subtitlesState.subtitles.length > 0
+                              ? "Select a subtitle on the timeline or in the sidebar to edit its timing, Arabic text, and translation."
+                              : "Generate subtitles first, then select one to inspect and fine-tune its timing and text."}
+                          </p>
+                        </div>
+                      </div>
                     </section>
                   )}
                 </div>

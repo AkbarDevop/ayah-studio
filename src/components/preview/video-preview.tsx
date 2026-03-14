@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Play, Pause, Video, Move } from "lucide-react";
+import { Play, Pause, Video, Move, Upload, BookOpen } from "lucide-react";
 import type {
   AspectRatioPreset,
   PlaybackMode,
@@ -355,8 +355,8 @@ export default function VideoPreview({
           </>
         )}
 
-        {/* Time indicator — top left */}
-        <div className="glass-overlay font-mono-ui absolute left-3 top-3 z-10 rounded-md px-2 py-1 text-xs text-[var(--text-muted)]">
+        {/* Time indicator -- top left */}
+        <div className="glass-overlay font-mono-ui absolute left-3 top-3 z-10 rounded-md px-2 py-1 text-xs text-[var(--text-muted)] transition-colors duration-200">
           {formatDisplayTime(currentTime)}
         </div>
 
@@ -364,43 +364,46 @@ export default function VideoPreview({
           {aspectRatioLabel}
         </div>
 
-        {/* Play/Pause — top right */}
+        {/* Play/Pause -- top right */}
         <button
           type="button"
           onClick={onPlayPause}
           disabled={!canPlay}
           className={[
-            "glass-overlay absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors",
+            "glass-overlay absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-[var(--text-muted)] transition-all duration-200",
             canPlay
-              ? "hover:text-[var(--text)]"
+              ? "hover:text-[var(--text)] hover:scale-110 active:scale-95"
               : "cursor-not-allowed opacity-50",
           ].join(" ")}
-          aria-label={playing ? "Pause" : "Play"}
+          aria-label={playing ? "Pause playback" : "Start playback"}
         >
-          {playing ? <Pause size={14} /> : <Play size={14} />}
+          {playing ? <Pause size={15} /> : <Play size={15} />}
         </button>
 
         <div className="preview-safe-frame" />
         <div className="preview-safe-line" data-line="upper" />
         <div className="preview-safe-line" data-line="lower" />
 
-        {/* Empty state */}
+        {/* Empty state -- improved with actionable guidance */}
         {!videoSrc && subtitles.length === 0 && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[var(--border-light)]">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 animate-fade-in">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[var(--border-light)] bg-[var(--surface)]/60 backdrop-blur-sm">
               <Video size={24} className="text-[var(--text-dim)]" />
             </div>
-            <div className="space-y-1 text-center">
-              <p className="font-mono-ui text-sm text-[var(--text-dim)]">
-                {videoSrc
-                  ? "Select ayahs to create subtitles"
-                  : "Upload a reciter clip or start with subtitles"}
+            <div className="max-w-xs space-y-2 text-center">
+              <p className="font-mono-ui text-sm font-medium text-[var(--text-muted)]">
+                Your preview will appear here
               </p>
-              {!videoSrc && (
-                <p className="text-xs text-[var(--text-dim)]">
-                  The canvas will switch to real footage automatically.
+              <div className="space-y-1.5">
+                <p className="flex items-center justify-center gap-1.5 text-xs text-[var(--text-dim)]">
+                  <Upload size={12} />
+                  Upload a recitation clip to get started
                 </p>
-              )}
+                <p className="flex items-center justify-center gap-1.5 text-xs text-[var(--text-dim)]">
+                  <BookOpen size={12} />
+                  Or browse and select ayahs from the sidebar
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -412,17 +415,18 @@ export default function VideoPreview({
         )}
 
         {videoSrc && !videoReady && !videoError && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/25">
-            <div className="glass-overlay rounded-full px-4 py-2">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/25 animate-fade-in">
+            <div className="glass-overlay flex items-center gap-3 rounded-full px-5 py-2.5">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--gold-dim)] border-t-[var(--gold)]" />
               <p className="font-mono-ui text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                Loading video frame...
+                Loading video...
               </p>
             </div>
           </div>
         )}
 
         {videoError && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 px-6 text-center">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 px-6 text-center animate-fade-in">
             <div className="max-w-md rounded-xl border border-[var(--accent)] bg-[var(--surface)]/95 px-5 py-4">
               <p className="font-mono-ui text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--accent)]">
                 Video Load Error
@@ -435,7 +439,7 @@ export default function VideoPreview({
         )}
 
         {videoSrc && subtitles.length === 0 && (
-          <div className="glass-overlay font-mono-ui absolute bottom-3 right-3 z-10 rounded-md px-2.5 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
+          <div className="glass-overlay font-mono-ui absolute bottom-3 right-3 z-10 rounded-md px-2.5 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] animate-fade-in">
             Add ayahs to preview subtitles
           </div>
         )}
@@ -447,7 +451,7 @@ export default function VideoPreview({
             onPointerDown={handleSubtitlePointerDown}
             data-subtitle-theme={subtitleStyleId}
             data-preview-ratio={aspectRatio}
-            className="preview-stage-caption subtitle-theme-surface absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-2xl border border-white/10 px-5 py-3 text-center shadow-2xl shadow-black/40 backdrop-blur-md active:cursor-grabbing"
+            className="preview-stage-caption subtitle-theme-surface absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-2xl border border-white/10 px-5 py-3 text-center shadow-2xl shadow-black/40 backdrop-blur-md active:cursor-grabbing transition-[left,top] duration-75"
             style={{
               left: `${subtitlePlacement.x * 100}%`,
               top: `${subtitlePlacement.y * 100}%`,
