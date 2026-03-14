@@ -5,6 +5,7 @@ import {
   Noto_Naskh_Arabic,
   Amiri,
 } from "next/font/google";
+import ErrorBoundary from "@/components/error-boundary";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -47,7 +48,7 @@ export default function RootLayout({
       <body
         className={`${manrope.variable} ${ibmPlexMono.variable} ${notoNaskhArabic.variable} ${amiri.variable} min-h-screen antialiased`}
       >
-        {children}
+        <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>
   );
