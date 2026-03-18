@@ -16,6 +16,7 @@ export const DEFAULT_SUBTITLE_FORMATTING: SubtitleFormatting = {
   translationItalic: true,
   splitLongAyahs: true,
   maxWordsPerChunk: 12,
+  karaokeEnabled: false,
 };
 
 export const ARABIC_FONT_OPTIONS: Array<{
