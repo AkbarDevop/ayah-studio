@@ -37,6 +37,7 @@ export interface Subtitle {
   end: number;
   chunkIndex?: number;
   chunkCount?: number;
+  wordTimings?: WordTiming[];
 }
 
 export interface SubtitleStyle {
@@ -76,12 +77,26 @@ export interface SubtitleFormatting {
   translationItalic: boolean;
   splitLongAyahs: boolean;
   maxWordsPerChunk: number;
+  karaokeEnabled: boolean;
+}
+
+export interface WordTiming {
+  word: string;
+  start: number;
+  end: number;
+}
+
+export interface ReciterEdition {
+  id: string;
+  name: string;
+  identifier: string;
 }
 
 export interface AyahTimingSegment {
   ayahNum: number;
   start: number;
   end: number;
+  words?: WordTiming[];
 }
 
 export interface LeadingRecitationSegment {

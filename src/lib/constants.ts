@@ -1,4 +1,4 @@
-import type { Translation, SubtitleStyle } from "@/types";
+import type { Translation, SubtitleStyle, ReciterEdition } from "@/types";
 
 export const QURAN_API = "https://api.alquran.cloud/v1";
 
@@ -69,4 +69,14 @@ export const RECITERS = [
   "Abdulbasit Abdulsamad",
   "Saad Al-Ghamdi",
   "Ahmed Al-Ajmi",
+];
+
+export const RECITER_EDITIONS: ReciterEdition[] = [
+  { id: "alafasy", name: "Mishary Rashid Alafasy", identifier: "ar.alafasy" },
+  { id: "abdulsamad", name: "Abdulbasit Abdulsamad", identifier: "ar.abdulsamad" },
+  { id: "sudais", name: "Abdul Rahman Al-Sudais", identifier: "ar.abdurrahmaansudais" },
+  { id: "minshawi", name: "Mohamed Siddiq El-Minshawi", identifier: "ar.minshawi" },
+  { id: "husary", name: "Mahmoud Khalil Al-Husary", identifier: "ar.husary" },
+  { id: "ajamy", name: "Ahmed Al-Ajmi", identifier: "ar.ahmedajamy" },
+  { id: "mahermuaiqly", name: "Maher Al-Muaiqly", identifier: "ar.mahermuaiqly" },
 ];
