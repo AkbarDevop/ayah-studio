@@ -200,22 +200,22 @@ export default function AudioWaveform({
 
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2.5 md:gap-3 md:px-4 md:py-3">
+        <div className="min-w-0 flex-1">
           <p className="font-mono-ui text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-dim)]">
             Audio Waveform
           </p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
+          <p className="mt-1 truncate text-xs text-[var(--text-muted)] md:text-sm">
             {audioName
               ? audioName
-              : "Upload a clip and its audio track will appear here automatically."}
+              : "Upload a clip to load audio automatically."}
           </p>
         </div>
-        <div className="text-right">
-          <p className="font-mono-ui text-xs uppercase tracking-[0.12em] text-[var(--gold)]">
+        <div className="shrink-0 text-right">
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.12em] text-[var(--gold)] md:text-xs">
             {formatAudioTime(currentTime)} / {formatAudioTime(audioDuration)}
           </p>
-          <p className="mt-1 text-[11px] text-[var(--text-dim)]">
+          <p className="mt-1 hidden text-[11px] text-[var(--text-dim)] md:block">
             {audioSrc
               ? usingClipAudio
                 ? "Using clip audio as the timing source"
@@ -227,13 +227,11 @@ export default function AudioWaveform({
         </div>
       </div>
 
-      <div className="relative px-4 py-4">
+      <div className="relative px-3 py-3 md:px-4 md:py-4">
         {!audioSrc && (
-          <div className="flex h-[120px] items-center justify-center rounded-lg border border-dashed border-[var(--border-light)] bg-[var(--surface-alt)]/60 px-6 text-center">
-            <p className="max-w-lg text-sm leading-relaxed text-[var(--text-dim)]">
-              Upload a reciter clip and Ayah Studio will use its built-in audio
-              track automatically. If the clip audio is noisy or edited, you can
-              still provide a separate override track later.
+          <div className="flex h-[80px] items-center justify-center rounded-lg border border-dashed border-[var(--border-light)] bg-[var(--surface-alt)]/60 px-4 text-center md:h-[120px] md:px-6">
+            <p className="max-w-lg text-xs leading-relaxed text-[var(--text-dim)] md:text-sm">
+              Upload a reciter clip and its audio will load automatically.
             </p>
           </div>
         )}

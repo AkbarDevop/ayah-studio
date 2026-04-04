@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { NextResponse } from "next/server";
 import {
   getYouTubeImportLimitMessage,
@@ -12,8 +12,10 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
-const YT_DLP_PATH = process.env.YT_DLP_PATH ?? "yt-dlp";
+const YT_DLP_PATH = process.env.YT_DLP_PATH || "yt-dlp";
+
 const YOUTUBE_IMPORT_FORMAT =
   "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]/best";
 
@@ -21,8 +23,22 @@ interface YouTubeImportRequest {
   url?: string;
 }
 
-interface YouTubeMetadata {
-  title?: string;
+function runYtDlp(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      YT_DLP_PATH,
+      args,
+      { maxBuffer: 10 * 1024 * 1024, timeout: 90_000 },
+      (error, stdout, stderr) => {
+        if (error) {
+          const msg = stderr?.trim() || error.message || "yt-dlp failed";
+          reject(new Error(msg));
+          return;
+        }
+        resolve(stdout);
+      }
+    );
+  });
 }
 
 export async function POST(request: Request) {
@@ -49,9 +65,16 @@ export async function POST(request: Request) {
   const outputTemplate = path.join(tempDir, "clip.%(ext)s");
 
   try {
-    const metadata = await fetchYouTubeMetadata(url);
+    const metadataJson = await runYtDlp([
+      "--no-playlist",
+      "--dump-single-json",
+      "--no-warnings",
+      "--skip-download",
+      url,
+    ]);
+    const metadata = JSON.parse(metadataJson) as { title?: string };
 
-    await runProcess(YT_DLP_PATH, [
+    await runYtDlp([
       "--no-playlist",
       "--no-progress",
       "--newline",
@@ -64,7 +87,11 @@ export async function POST(request: Request) {
       url,
     ]);
 
-    const mediaPath = await findDownloadedMediaPath(tempDir);
+    const entries = await fs.readdir(tempDir);
+    const mediaFile = entries.find((e) => /\.(mp4|webm)$/i.test(e));
+    if (!mediaFile) throw new Error("No video file produced.");
+
+    const mediaPath = path.join(tempDir, mediaFile);
     const stat = await fs.stat(mediaPath);
 
     if (stat.size > MAX_YOUTUBE_IMPORT_BYTES) {
@@ -88,10 +115,20 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Failed to import this YouTube clip.";
+    const raw =
+      error instanceof Error ? error.message : "YouTube import failed.";
+
+    // Detect YouTube bot-blocking patterns
+    const isBlocked =
+      raw.includes("Sign in to confirm") ||
+      raw.includes("bot") ||
+      raw.includes("ENOENT") ||
+      raw.includes("yt-dlp") ||
+      raw.includes("HTTP Error 403");
+
+    const message = isBlocked
+      ? "YouTube blocked this server. Download the video yourself and drag it into the upload area above."
+      : raw;
 
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
@@ -99,37 +136,9 @@ export async function POST(request: Request) {
   }
 }
 
-async function fetchYouTubeMetadata(url: string) {
-  const stdout = await runProcessWithOutput(YT_DLP_PATH, [
-    "--no-playlist",
-    "--dump-single-json",
-    "--no-warnings",
-    "--no-call-home",
-    "--skip-download",
-    url,
-  ]);
-
-  const data = JSON.parse(stdout) as YouTubeMetadata;
-  return data;
-}
-
-async function findDownloadedMediaPath(tempDir: string) {
-  const entries = await fs.readdir(tempDir);
-  const mediaFile = entries.find((entry) => /\.(mp4|webm)$/i.test(entry));
-
-  if (!mediaFile) {
-    throw new Error(
-      "yt-dlp completed but no playable video file was produced for this URL."
-    );
-  }
-
-  return path.join(tempDir, mediaFile);
-}
-
 function buildImportedFilename(title: string | undefined, ext: string) {
   const safeTitle = sanitizeFilename(title || `youtube-import-${randomUUID()}`);
-  const normalizedExt = ext || ".mp4";
-  return `${safeTitle}${normalizedExt}`;
+  return `${safeTitle}${ext || ".mp4"}`;
 }
 
 function sanitizeFilename(input: string) {
@@ -138,73 +147,4 @@ function sanitizeFilename(input: string) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 100);
-}
-
-async function runProcess(command: string, args: string[]) {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
-      stdio: ["ignore", "ignore", "pipe"],
-    });
-
-    let stderr = "";
-
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-
-    child.on("error", (error) => {
-      reject(error);
-    });
-
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(
-        new Error(
-          stderr.trim() ||
-            `${path.basename(command)} exited with code ${String(code)}`
-        )
-      );
-    });
-  });
-}
-
-async function runProcessWithOutput(command: string, args: string[]) {
-  return await new Promise<string>((resolve, reject) => {
-    const child = spawn(command, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-
-    child.on("error", (error) => {
-      reject(error);
-    });
-
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve(stdout);
-        return;
-      }
-
-      reject(
-        new Error(
-          stderr.trim() ||
-            `${path.basename(command)} exited with code ${String(code)}`
-        )
-      );
-    });
-  });
 }

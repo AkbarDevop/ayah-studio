@@ -73,11 +73,17 @@ export interface SubtitleFormatting {
   translationFontSize: number;
   arabicColorOverride: string | null;
   translationColorOverride: string | null;
+  backgroundColorOverride: string | null;
   backgroundOpacity: number;
+  backgroundBlur: number;
+  borderRadius: number;
   translationItalic: boolean;
   splitLongAyahs: boolean;
   maxWordsPerChunk: number;
   karaokeEnabled: boolean;
+  textShadow: boolean;
+  textOutline: boolean;
+  lineSpacing: number;
 }
 
 export interface WordTiming {
@@ -90,6 +96,7 @@ export interface ReciterEdition {
   id: string;
   name: string;
   identifier: string;
+  quranComId: number;
 }
 
 export interface AyahTimingSegment {
@@ -130,4 +137,6 @@ export interface AyahDetectionResult {
 export type SidebarTab = "browse" | "subtitles" | "style";
 export type ExportFormat = "srt" | "ass" | "json";
 export type AspectRatioPreset = "landscape" | "portrait" | "square";
-export type PlaybackMode = "simulation" | "video" | "audio";
+export type PlaybackMode = "simulation" | "video" | "audio" | "reciter";
+
+export type MobileTab = "browse" | "preview" | "timeline" | "export";

@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.gstack/
+
+# Local Netlify folder
+.netlify
+
+# yt-dlp standalone binary (downloaded at build time)
+/bin/yt-dlp
+
+# FFmpeg WASM files (~31MB, self-hosted to avoid CORS/COEP issues)
+/public/ffmpeg/

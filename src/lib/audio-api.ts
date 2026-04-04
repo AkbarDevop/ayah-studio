@@ -7,6 +7,82 @@ export interface AyahAudioEntry {
   duration: number | null;
 }
 
+// ── Quran.com API (pre-computed timestamps) ──────────────────────────────────
+
+const QURAN_COM_API = "https://api.quran.com/api/v4";
+
+export interface ReciterTimingEntry {
+  ayahNum: number;
+  start: number; // seconds
+  end: number;   // seconds
+}
+
+export interface ReciterRecitation {
+  audioUrl: string;
+  totalDuration: number; // seconds
+  ayahTimings: ReciterTimingEntry[];
+}
+
+interface QuranComTimestamp {
+  verse_key: string;
+  timestamp_from: number; // ms
+  timestamp_to: number;   // ms
+  duration: number;        // ms
+  segments: Array<number[]>;
+}
+
+interface QuranComChapterRecitation {
+  audio_file: {
+    id: number;
+    chapter_id: number;
+    file_size: number;
+    format: string;
+    audio_url: string;
+    timestamps?: QuranComTimestamp[];
+  };
+}
+
+/**
+ * Fetch a full-surah MP3 URL with pre-computed per-ayah timestamps
+ * from the quran.com API. Single API call, instant results.
+ */
+export async function fetchReciterTimings(
+  surahNum: number,
+  quranComReciterId: number
+): Promise<ReciterRecitation> {
+  const res = await fetch(
+    `${QURAN_COM_API}/chapter_recitations/${quranComReciterId}/${surahNum}?segments=true`
+  );
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch reciter audio from quran.com");
+  }
+
+  const data: QuranComChapterRecitation = await res.json();
+  const { audio_url, timestamps } = data.audio_file;
+
+  if (!timestamps || timestamps.length === 0) {
+    throw new Error("No timing data available for this reciter");
+  }
+
+  const ayahTimings: ReciterTimingEntry[] = timestamps.map((ts) => {
+    const [, ayahStr] = ts.verse_key.split(":");
+    return {
+      ayahNum: parseInt(ayahStr, 10),
+      start: ts.timestamp_from / 1000,
+      end: ts.timestamp_to / 1000,
+    };
+  });
+
+  const totalDuration = timestamps[timestamps.length - 1].timestamp_to / 1000;
+
+  return {
+    audioUrl: audio_url,
+    totalDuration,
+    ayahTimings,
+  };
+}
+
 interface AudioAyahResponse {
   number: number;
   audio: string;

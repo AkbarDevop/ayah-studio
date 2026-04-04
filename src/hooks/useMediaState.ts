@@ -97,8 +97,8 @@ export function useMediaState(onReset: () => void) {
     event.target.value = "";
   }
 
-  async function importFromYouTube() {
-    const trimmedUrl = youtubeUrl.trim();
+  async function importFromYouTube(urlOverride?: string) {
+    const trimmedUrl = (urlOverride ?? youtubeUrl).trim();
 
     if (!trimmedUrl) {
       setYoutubeImportError("Paste a YouTube video link first.");

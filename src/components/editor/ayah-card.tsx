@@ -21,13 +21,13 @@ export default function AyahCard({
     <button
       type="button"
       onClick={onToggle}
-      className={`group w-full rounded-lg border p-4 text-left transition-all ${
+      className={`group w-full rounded-lg border p-3 text-left transition-all md:p-4 ${
         isSelected
           ? "border-[var(--gold)] bg-[var(--gold)]/[0.06] shadow-lg shadow-[var(--gold)]/[0.05]"
           : "border-[var(--border)] bg-[var(--surface-alt)] hover:border-[var(--border-light)]"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2.5 md:gap-3">
         {/* Number Badge */}
         <div
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
@@ -56,14 +56,14 @@ export default function AyahCard({
           {/* Arabic Text */}
           <p
             dir="rtl"
-            className="font-arabic-ui text-[22px] leading-loose text-[var(--gold)]"
+            className="font-arabic-ui text-lg leading-loose text-[var(--gold)] md:text-[22px]"
           >
             {arabicText}
           </p>
 
           {/* Translation */}
           {translation && (
-            <p className="mt-2 text-sm italic leading-relaxed text-[var(--text-muted)]">
+            <p className="mt-1.5 text-xs italic leading-relaxed text-[var(--text-muted)] md:mt-2 md:text-sm">
               {translation}
             </p>
           )}

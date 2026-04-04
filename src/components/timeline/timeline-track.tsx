@@ -192,8 +192,8 @@ export default function TimelineTrack({
                 />
               </>
             )}
-            <span className="truncate px-2 text-[10px] font-bold tracking-[0.04em]">
-              {sub.label ?? sub.ayahNum}
+            <span className="truncate px-2 text-[10px] font-bold tracking-[0.04em]" dir="rtl">
+              {sub.arabic.length > 30 ? sub.arabic.slice(0, 30) + "\u2026" : sub.arabic}
             </span>
           </button>
         );
@@ -201,9 +201,12 @@ export default function TimelineTrack({
 
       {/* Empty state */}
       {subtitles.length === 0 && (
-        <div className="flex h-full items-center justify-center">
+        <div className="flex h-full flex-col items-center justify-center gap-1">
           <span className="font-mono-ui text-[11px] uppercase tracking-wider text-[var(--text-dim)]">
             No subtitles
+          </span>
+          <span className="text-[10px] text-[var(--text-dim)]">
+            Select ayahs to generate subtitles
           </span>
         </div>
       )}

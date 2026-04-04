@@ -27,7 +27,8 @@ import {
   MAX_AYAH_DETECT_UPLOAD_BYTES,
   getAyahDetectUploadLimitMessage,
 } from "@/lib/ayah-detection-config";
-import type { AyahDetectionMatch, AyahTimingSegment } from "@/types";
+import type { AyahDetectionMatch, AyahTimingSegment, WordTiming } from "@/types";
+import { alignWordsToQuranText } from "@/lib/word-alignment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,8 +37,8 @@ const HUGGINGFACE_ASR_MODELS = [
   "tarteel-ai/whisper-base-ar-quran",
   "openai/whisper-large-v3",
 ] as const;
-const LOCAL_MLX_WHISPER_MODEL =
-  process.env.LOCAL_WHISPER_MODEL ?? "mlx-community/whisper-large-v3-turbo-q4";
+const LOCAL_WHISPER_MODEL =
+  process.env.LOCAL_WHISPER_MODEL ?? "mlx-community/whisper-small-mlx";
 const UV_PATH = process.env.UV_PATH ?? "uv";
 const SILENCE_FILTER = "silencedetect=noise=-18dB:d=0.08";
 const SILENCE_EDGE_PADDING_SECONDS = 0.35;
@@ -91,11 +92,24 @@ export async function POST(request: Request) {
     const audioBuffer = await fs.readFile(outputPath);
     const clipDuration = getWavDurationSeconds(audioBuffer);
     const silenceRanges = await detectSilenceRanges(outputPath);
-    const { transcript, provider, chunks } = await transcribeAudio(
+    const { transcript, provider, chunks, wordTimings } = await transcribeAudio(
       audioBuffer,
       outputPath,
       token
     );
+
+    // Early bail if the transcript is garbage (no usable Arabic content)
+    const normalizedFull = normalizeArabicText(transcript);
+    if (isGarbageTranscript(normalizedFull)) {
+      return NextResponse.json({
+        provider,
+        transcript,
+        matches: [],
+        warning:
+          "The transcription did not produce enough recognizable Arabic text. Try a cleaner recording with less background noise, or use override audio.",
+      });
+    }
+
     const transcriptChunks =
       chunks.length > 0
         ? chunks
@@ -112,6 +126,12 @@ export async function POST(request: Request) {
     const trimmedTranscript =
       buildTranscriptFromChunks(trimmedTranscriptChunks) ||
       stripLeadingRecitationIntro(transcript);
+    console.log("[ayah-detect] provider:", provider);
+    console.log("[ayah-detect] transcript length:", transcript.length, "chars");
+    console.log("[ayah-detect] transcript preview:", transcript.slice(0, 300));
+    console.log("[ayah-detect] normalized words:", normalizeArabicText(transcript).split(" ").length);
+
+    const t0 = Date.now();
     const rawMatches = mergeAyahMatches(
       await detectAyahRangesFromTranscript(transcript, 3),
       trimmedTranscript && trimmedTranscript !== normalizeArabicText(transcript)
@@ -124,6 +144,9 @@ export async function POST(request: Request) {
           )
         : []
     );
+    console.log("[ayah-detect] matching took:", Date.now() - t0, "ms");
+    console.log("[ayah-detect] raw matches:", rawMatches.map(m => `${m.surahName} ${m.startAyah}-${m.endAyah} (${(m.score * 100).toFixed(1)}%)`));
+
     const matches = await Promise.all(
       rawMatches.map((match) =>
         enrichMatchWithTiming(
@@ -132,12 +155,41 @@ export async function POST(request: Request) {
           silenceRanges,
           transcriptChunks,
           leadingSegments,
-          transcript
+          transcript,
+          wordTimings
         )
       )
     );
 
+    // Fallback: if no matches but Fatiha was detected as a leading segment,
+    // the reciter was likely reciting just Al-Fatiha.
     if (matches.length === 0) {
+      const fatihaLeading = leadingSegments.find((s) => s.kind === "fatiha");
+      if (fatihaLeading) {
+        const fatihaMatch = await enrichMatchWithTiming(
+          {
+            surahNumber: 1,
+            surahName: "Al-Faatiha",
+            surahArabicName: "سُورَةُ ٱلْفَاتِحَةِ",
+            startAyah: 1,
+            endAyah: 7,
+            score: 0.75,
+            matchedText: transcript,
+          },
+          clipDuration,
+          silenceRanges,
+          transcriptChunks,
+          leadingSegments,
+          transcript,
+          wordTimings
+        );
+        return NextResponse.json({
+          provider,
+          transcript,
+          matches: [fatihaMatch],
+        });
+      }
+
       return NextResponse.json({
         provider,
         transcript,
@@ -193,7 +245,8 @@ async function enrichMatchWithTiming(
     start: number;
     end: number;
   }>,
-  transcript?: string
+  transcript?: string,
+  rawWordTimings: WordTiming[] = []
 ): Promise<AyahDetectionMatch> {
   const range = await getAyahRangeMetadata(
     match.surahNumber,
@@ -223,18 +276,23 @@ async function enrichMatchWithTiming(
   );
 
   if (chunkAlignedTimings) {
+    const enrichedTimings = attachWordTimingsToSegments(
+      chunkAlignedTimings,
+      range.ayahs,
+      rawWordTimings
+    );
     const leadingSegmentsWithTimings = await hydrateLeadingSegmentsForMatch(
       includedLeadingSegments,
       transcriptChunks,
       silenceRanges,
-      chunkAlignedTimings[0]?.start,
+      enrichedTimings[0]?.start,
       clipDuration,
       transcript
     );
 
     return {
       ...match,
-      timings: chunkAlignedTimings,
+      timings: enrichedTimings,
       timingSource: "chunks",
       leadingSegments: leadingSegmentsWithTimings,
     };
@@ -250,21 +308,58 @@ async function enrichMatchWithTiming(
     timingWindowStart
   );
 
+  const enrichedTimings = attachWordTimingsToSegments(
+    timings.segments,
+    range.ayahs,
+    rawWordTimings
+  );
+
   const leadingSegmentsWithTimings = await hydrateLeadingSegmentsForMatch(
     includedLeadingSegments,
     transcriptChunks,
     silenceRanges,
-    timings.segments[0]?.start,
+    enrichedTimings[0]?.start,
     clipDuration,
     transcript
   );
 
   return {
     ...match,
-    timings: timings.segments,
+    timings: enrichedTimings,
     timingSource: timings.source,
     leadingSegments: leadingSegmentsWithTimings,
   };
+}
+
+function attachWordTimingsToSegments(
+  segments: AyahTimingSegment[],
+  ayahs: Array<{ numberInSurah: number; text: string; wordCount: number }>,
+  rawWordTimings: WordTiming[]
+): AyahTimingSegment[] {
+  if (rawWordTimings.length === 0) {
+    return segments;
+  }
+
+  return segments.map((segment) => {
+    const ayah = ayahs.find((a) => a.numberInSurah === segment.ayahNum);
+    if (!ayah) {
+      return segment;
+    }
+
+    // Filter raw word timings to those overlapping this segment's time window
+    const overlapping = rawWordTimings.filter(
+      (wt) => wt.end > segment.start && wt.start < segment.end
+    );
+
+    const words = alignWordsToQuranText(
+      ayah.text,
+      overlapping,
+      segment.start,
+      segment.end
+    );
+
+    return { ...segment, words };
+  });
 }
 
 async function transcribeWithHuggingFace(audioBuffer: Buffer, token: string) {
@@ -289,16 +384,86 @@ async function transcribeWithHuggingFace(audioBuffer: Buffer, token: string) {
   );
 }
 
+function extractWordTimings(payload: unknown): WordTiming[] {
+  if (!payload || typeof payload !== "object" || !("chunks" in payload)) {
+    return [];
+  }
+
+  const rawChunks = (payload as { chunks?: unknown }).chunks;
+  if (!Array.isArray(rawChunks)) {
+    return [];
+  }
+
+  return rawChunks
+    .map((chunk) => {
+      if (!chunk || typeof chunk !== "object") {
+        return null;
+      }
+
+      const text = typeof (chunk as { text?: unknown }).text === "string"
+        ? (chunk as { text: string }).text.trim()
+        : "";
+      const timestamp = normalizeChunkTimestamp(
+        (chunk as { timestamp?: unknown }).timestamp
+      );
+
+      if (!text || !timestamp) {
+        return null;
+      }
+
+      return {
+        word: text,
+        start: timestamp[0],
+        end: timestamp[1],
+      };
+    })
+    .filter((timing): timing is WordTiming => Boolean(timing));
+}
+
 async function transcribeAudio(
   audioBuffer: Buffer,
   audioPath: string,
   token: string | null
 ) {
-  let huggingFaceError: Error | null = null;
+  // Priority 1: Groq Whisper API (free, fastest — ~2s)
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      console.log("[ayah-detect] trying Groq Whisper...");
+      const result = await transcribeWithGroq(audioPath, groqKey);
+      return {
+        transcript: result.transcript,
+        chunks: result.chunks,
+        wordTimings: result.wordTimings,
+        provider: "groq:whisper-large-v3-turbo",
+      };
+    } catch (error) {
+      console.warn("[ayah-detect] Groq failed, trying fallbacks:", (error as Error).message);
+    }
+  }
 
+  // Priority 2: OpenAI Whisper API (paid, fast, word-level timestamps)
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    try {
+      console.log("[ayah-detect] trying OpenAI Whisper...");
+      const result = await transcribeWithOpenAI(audioPath, openaiKey);
+      return {
+        transcript: result.transcript,
+        chunks: result.chunks,
+        wordTimings: result.wordTimings,
+        provider: "openai:whisper-1",
+      };
+    } catch (error) {
+      console.warn("[ayah-detect] OpenAI failed, trying fallbacks:", (error as Error).message);
+    }
+  }
+
+  // Priority 3: HuggingFace Inference API
+  let huggingFaceError: Error | null = null;
   if (token) {
     try {
-      const { transcript, model, chunks } = await transcribeWithHuggingFace(
+      const { transcript, model, chunks, wordTimings } = await transcribeWithHuggingFace(
         audioBuffer,
         token
       );
@@ -306,6 +471,7 @@ async function transcribeAudio(
       return {
         transcript,
         chunks,
+        wordTimings,
         provider: `huggingface:${model}`,
       };
     } catch (error) {
@@ -318,12 +484,14 @@ async function transcribeAudio(
     }
   }
 
+  // Priority 4: Local MLX Whisper
   try {
-    const localResult = await transcribeLocallyWithMlxWhisper(audioPath);
+    const localResult = await transcribeLocally(audioPath);
     return {
       transcript: localResult.transcript,
       chunks: localResult.chunks,
-      provider: `local:${LOCAL_MLX_WHISPER_MODEL}`,
+      wordTimings: localResult.wordTimings,
+      provider: `local:${LOCAL_WHISPER_MODEL}`,
     };
   } catch (localError) {
     const localMessage =
@@ -336,16 +504,169 @@ async function transcribeAudio(
     }
 
     throw new Error(
-      `Ayah detection needs either a working Hugging Face ASR token or local MLX Whisper support. Local fallback failed: ${localMessage}`
+      `Ayah detection needs either an OpenAI API key, a Hugging Face token, or local MLX Whisper. Local fallback failed: ${localMessage}`
     );
   }
+}
+
+async function transcribeWithGroq(
+  audioPath: string,
+  apiKey: string
+): Promise<{ transcript: string; chunks: TranscriptChunk[]; wordTimings: WordTiming[] }> {
+  // Convert WAV to MP3 for faster upload
+  const mp3Path = audioPath.replace(/\.wav$/, "-groq.mp3");
+  try {
+    await runProcess(process.env.FFMPEG_PATH ?? "ffmpeg", [
+      "-y", "-i", audioPath, "-ac", "1", "-ar", "16000", "-b:a", "64k", "-f", "mp3", mp3Path,
+    ]);
+  } catch {
+    // Fall back to WAV
+  }
+
+  const useMp3 = await fs.stat(mp3Path).then(() => true).catch(() => false);
+  const uploadPath = useMp3 ? mp3Path : audioPath;
+  const uploadName = useMp3 ? "audio.mp3" : "audio.wav";
+  const uploadType = useMp3 ? "audio/mpeg" : "audio/wav";
+
+  const audioData = await fs.readFile(uploadPath);
+  console.log(`[ayah-detect] Groq uploading ${uploadName}: ${(audioData.length / 1024).toFixed(0)} KB`);
+  const blob = new Blob([audioData], { type: uploadType });
+
+  const formData = new FormData();
+  formData.append("file", blob, uploadName);
+  formData.append("model", "whisper-large-v3-turbo");
+  formData.append("language", "ar");
+  formData.append("response_format", "verbose_json");
+  formData.append("timestamp_granularities[]", "word");
+  formData.append("timestamp_granularities[]", "segment");
+
+  const t0 = Date.now();
+  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq Whisper API error ${response.status}: ${errorText}`);
+  }
+
+  const result = await response.json() as {
+    text?: string;
+    segments?: Array<{ text?: string; start?: number; end?: number }>;
+    words?: Array<{ word?: string; start?: number; end?: number }>;
+  };
+  console.log(`[ayah-detect] Groq responded in ${Date.now() - t0}ms`);
+
+  const transcript = (result.text ?? "").trim();
+  if (!transcript) {
+    throw new Error("Groq Whisper returned empty transcript");
+  }
+
+  const chunks: TranscriptChunk[] = (result.segments ?? [])
+    .map((seg) => ({
+      text: (seg.text ?? "").trim(),
+      start: Number(seg.start),
+      end: Number(seg.end),
+    }))
+    .filter((c) => c.text && Number.isFinite(c.start) && Number.isFinite(c.end) && c.end > c.start);
+
+  const wordTimings: WordTiming[] = (result.words ?? [])
+    .map((w) => ({
+      word: (w.word ?? "").trim(),
+      start: Number(w.start),
+      end: Number(w.end),
+    }))
+    .filter((w) => w.word && Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start);
+
+  // Clean up temp MP3
+  if (useMp3) await fs.rm(mp3Path, { force: true }).catch(() => {});
+
+  return { transcript, chunks, wordTimings };
+}
+
+async function transcribeWithOpenAI(
+  audioPath: string,
+  apiKey: string
+): Promise<{ transcript: string; chunks: TranscriptChunk[]; wordTimings: WordTiming[] }> {
+  // Convert WAV to MP3 for much faster upload (~10x smaller)
+  const mp3Path = audioPath.replace(/\.wav$/, ".mp3");
+  try {
+    await runProcess(process.env.FFMPEG_PATH ?? "ffmpeg", [
+      "-y", "-i", audioPath, "-ac", "1", "-ar", "16000", "-b:a", "64k", "-f", "mp3", mp3Path,
+    ]);
+  } catch {
+    // Fall back to WAV if MP3 conversion fails
+  }
+
+  const useMp3 = await fs.stat(mp3Path).then(() => true).catch(() => false);
+  const uploadPath = useMp3 ? mp3Path : audioPath;
+  const uploadName = useMp3 ? "audio.mp3" : "audio.wav";
+  const uploadType = useMp3 ? "audio/mpeg" : "audio/wav";
+
+  const audioData = await fs.readFile(uploadPath);
+  console.log(`[ayah-detect] uploading ${uploadName}: ${(audioData.length / 1024).toFixed(0)} KB`);
+  const blob = new Blob([audioData], { type: uploadType });
+
+  const formData = new FormData();
+  formData.append("file", blob, uploadName);
+  formData.append("model", "whisper-1");
+  formData.append("language", "ar");
+  formData.append("response_format", "verbose_json");
+  formData.append("timestamp_granularities[]", "word");
+  formData.append("timestamp_granularities[]", "segment");
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI Whisper API error ${response.status}: ${errorText}`);
+  }
+
+  const result = await response.json() as {
+    text?: string;
+    segments?: Array<{ text?: string; start?: number; end?: number }>;
+    words?: Array<{ word?: string; start?: number; end?: number }>;
+  };
+
+  const transcript = (result.text ?? "").trim();
+  if (!transcript) {
+    throw new Error("OpenAI Whisper returned empty transcript");
+  }
+
+  const chunks: TranscriptChunk[] = (result.segments ?? [])
+    .map((seg) => ({
+      text: (seg.text ?? "").trim(),
+      start: Number(seg.start),
+      end: Number(seg.end),
+    }))
+    .filter((c) => c.text && Number.isFinite(c.start) && Number.isFinite(c.end) && c.end > c.start);
+
+  const wordTimings: WordTiming[] = (result.words ?? [])
+    .map((w) => ({
+      word: (w.word ?? "").trim(),
+      start: Number(w.start),
+      end: Number(w.end),
+    }))
+    .filter((w) => w.word && Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start);
+
+  return { transcript, chunks, wordTimings };
 }
 
 async function transcribeWithModel(
   audioBuffer: Buffer,
   token: string,
   model: string
-) {
+): Promise<{ transcript: string; chunks: TranscriptChunk[]; wordTimings: WordTiming[] }> {
   try {
     return await requestTimedTranscription(audioBuffer, token, model);
   } catch (error) {
@@ -364,6 +685,13 @@ async function requestTimedTranscription(
   token: string,
   model: string
 ) {
+  // Try word-level timestamps first for per-word timing
+  const wordLevelResult = await tryWordLevelTranscription(audioBuffer, token, model);
+  if (wordLevelResult) {
+    return wordLevelResult;
+  }
+
+  // Fall back to chunk-level timestamps
   const response = await fetch(
     `https://router.huggingface.co/hf-inference/models/${model}`,
     {
@@ -412,7 +740,66 @@ async function requestTimedTranscription(
   return {
     transcript,
     chunks: extractTranscriptChunks(payload),
+    wordTimings: [] as WordTiming[],
   };
+}
+
+async function tryWordLevelTranscription(
+  audioBuffer: Buffer,
+  token: string,
+  model: string
+): Promise<{ transcript: string; chunks: TranscriptChunk[]; wordTimings: WordTiming[] } | null> {
+  try {
+    const response = await fetch(
+      `https://router.huggingface.co/hf-inference/models/${model}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inputs: audioBuffer.toString("base64"),
+          parameters: {
+            return_timestamps: "word",
+          },
+        }),
+        cache: "no-store",
+      }
+    );
+
+    if (!response.ok) {
+      const status = response.status;
+      // 400/422 means the model doesn't support word-level — fall back silently
+      if (status === 400 || status === 422) {
+        return null;
+      }
+      // Other errors should propagate normally via the chunk-level path
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    const payload = contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
+    const transcript =
+      typeof payload === "string" ? payload : payload?.text ?? "";
+
+    if (!transcript || typeof transcript !== "string") {
+      return null;
+    }
+
+    const wordTimings = extractWordTimings(payload);
+
+    return {
+      transcript,
+      chunks: extractTranscriptChunks(payload),
+      wordTimings,
+    };
+  } catch {
+    // Any network/parse error — fall back to chunk-level
+    return null;
+  }
 }
 
 async function requestUntimedTranscription(
@@ -463,6 +850,7 @@ async function requestUntimedTranscription(
   return {
     transcript,
     chunks: [] as TranscriptChunk[],
+    wordTimings: [] as WordTiming[],
   };
 }
 
@@ -503,7 +891,7 @@ async function transcribeSpeechSegments(
   return transcriptChunks;
 }
 
-async function transcribeLocallyWithMlxWhisper(audioPath: string) {
+async function transcribeLocally(audioPath: string) {
   const scriptPath = path.join(
     process.cwd(),
     "scripts",
@@ -519,7 +907,7 @@ async function transcribeLocallyWithMlxWhisper(audioPath: string) {
     "python",
     scriptPath,
     audioPath,
-    LOCAL_MLX_WHISPER_MODEL,
+    LOCAL_WHISPER_MODEL,
   ]);
 
   const payload = JSON.parse(stdout) as {
@@ -528,6 +916,11 @@ async function transcribeLocallyWithMlxWhisper(audioPath: string) {
       text?: string;
       start?: number;
       end?: number;
+      words?: Array<{
+        word?: string;
+        start?: number;
+        end?: number;
+      }>;
     }>;
   };
   const transcript = payload.text?.trim() ?? "";
@@ -552,9 +945,26 @@ async function transcribeLocallyWithMlxWhisper(audioPath: string) {
         )
     : [];
 
+  const wordTimings: WordTiming[] = [];
+  if (Array.isArray(payload.segments)) {
+    for (const segment of payload.segments) {
+      if (Array.isArray(segment.words)) {
+        for (const w of segment.words) {
+          const word = (w.word ?? "").trim();
+          const start = Number(w.start);
+          const end = Number(w.end);
+          if (word && Number.isFinite(start) && Number.isFinite(end) && end > start) {
+            wordTimings.push({ word, start, end });
+          }
+        }
+      }
+    }
+  }
+
   return {
     transcript,
     chunks,
+    wordTimings,
   };
 }
 
@@ -616,6 +1026,9 @@ function buildSpeechSegments(
         start: cursor,
         end: silence.start,
       });
+    } else if (silence.start > cursor && speechSegments.length > 0) {
+      // Merge short fragments into the previous segment instead of dropping them
+      speechSegments[speechSegments.length - 1].end = silence.start;
     }
 
     cursor = Math.max(cursor, silence.end);
@@ -626,6 +1039,9 @@ function buildSpeechSegments(
       start: cursor,
       end: clipDuration,
     });
+  } else if (clipDuration > cursor && speechSegments.length > 0) {
+    // Merge trailing short fragment into previous segment
+    speechSegments[speechSegments.length - 1].end = clipDuration;
   }
 
   return mergeSegmentsDownToLimit(
@@ -1724,7 +2140,7 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
           `${ayahIndex - 1}:${startChunk}-${endChunk}`
         );
 
-        if (groupScore < 0.16) {
+        if (groupScore < 0.22) {
           continue;
         }
 
@@ -1738,7 +2154,7 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
   }
 
   const finalScore = dp[ayahs.length][usableChunks.length];
-  if (!Number.isFinite(finalScore) || finalScore / ayahs.length < 0.34) {
+  if (!Number.isFinite(finalScore) || finalScore / ayahs.length < 0.38) {
     return null;
   }
 
@@ -1964,10 +2380,22 @@ function clampBoundaryPositions(
   clamped[0] = startOffset;
   clamped[clamped.length - 1] = clipDuration;
 
+  // Forward pass: ensure each boundary is at least minGap after the previous
   for (let index = 1; index < clamped.length - 1; index += 1) {
     const previous = clamped[index - 1] + minGap;
     const next = clamped[index + 1] - minGap;
     clamped[index] = Math.min(next, Math.max(previous, clamped[index]));
+  }
+
+  // Backward pass: fix any remaining inversions caused by forward cascade
+  for (let index = clamped.length - 2; index >= 1; index -= 1) {
+    if (clamped[index] >= clamped[index + 1]) {
+      clamped[index] = clamped[index + 1] - minGap;
+    }
+    if (clamped[index] <= clamped[index - 1]) {
+      // If we still can't satisfy the gap, distribute evenly between neighbors
+      clamped[index] = (clamped[index - 1] + clamped[index + 1]) / 2;
+    }
   }
 
   return clamped;
@@ -2053,16 +2481,33 @@ function buildSegmentsFromTranscriptGroups(
   let previousEnd = startOffset;
 
   for (let index = 0; index < groups.length; index += 1) {
+    const isLast = index === groups.length - 1;
     const group = groups[index];
     const nextGroup = groups[index + 1];
-    const rawStart = Math.max(startOffset, group.start - edgePadding);
-    const rawEnd = Math.min(
-      clipDuration,
-      group.end + edgePadding,
-      nextGroup ? nextGroup.start - edgePadding : clipDuration
-    );
 
+    // For start: use previous segment's end to eliminate gaps.
+    // Only use group.start - padding if it's >= previousEnd (no gap).
+    const rawStart = Math.max(startOffset, group.start - edgePadding);
     const start = Math.max(previousEnd, rawStart);
+
+    // For end: if there's a gap to the next group, split it at the midpoint
+    // instead of leaving a dead zone between segments
+    let rawEnd: number;
+    if (isLast) {
+      // Last segment extends to clip end
+      rawEnd = clipDuration;
+    } else if (nextGroup) {
+      const gapBetweenGroups = nextGroup.start - group.end;
+      if (gapBetweenGroups > 0) {
+        // Split the gap at its midpoint so no timing is unaccounted for
+        rawEnd = Math.min(clipDuration, group.end + gapBetweenGroups / 2);
+      } else {
+        rawEnd = Math.min(clipDuration, group.end + edgePadding, nextGroup.start - edgePadding);
+      }
+    } else {
+      rawEnd = Math.min(clipDuration, group.end + edgePadding);
+    }
+
     const end = Math.max(start + minDuration, rawEnd);
 
     if (!Number.isFinite(start) || !Number.isFinite(end) || end > clipDuration + 0.001) {
@@ -2092,6 +2537,25 @@ function getWavDurationSeconds(audioBuffer: Buffer) {
 
 function countWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Detect garbage transcripts -- those with no meaningful Arabic content.
+ * Returns true if the normalized transcript has fewer than 2 words or is
+ * composed entirely of very short fragments that don't form coherent text.
+ */
+function isGarbageTranscript(normalizedText: string): boolean {
+  if (!normalizedText) return true;
+
+  const wordCount = countWords(normalizedText);
+  if (wordCount < 2) return true;
+
+  // Check if the text contains enough Arabic characters
+  // (after normalization, non-Arabic chars are stripped to spaces)
+  const arabicCharCount = normalizedText.replace(/\s/g, "").length;
+  if (arabicCharCount < 4) return true;
+
+  return false;
 }
 
 async function resolveHuggingFaceToken() {

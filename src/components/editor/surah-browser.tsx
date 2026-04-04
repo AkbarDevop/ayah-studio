@@ -1,9 +1,9 @@
 "use client";
 
-import { Search, BookOpen, ChevronDown } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { Search, BookOpen, ChevronDown, Globe } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import type { Surah } from "@/types";
-import { TRANSLATIONS } from "@/lib/constants";
+import { TRANSLATIONS, TRANSLATION_GROUP_MAP } from "@/lib/constants";
 
 interface SurahBrowserProps {
   surahs: Surah[];
@@ -12,6 +12,27 @@ interface SurahBrowserProps {
   onSelect: (surah: Surah) => void;
   translationEdition: string;
   onTranslationChange: (edition: string) => void;
+  loading?: boolean;
+}
+
+function SurahSkeleton() {
+  return (
+    <div className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] p-3.5">
+      <div className="flex items-center gap-3">
+        <div className="skeleton h-9 w-9 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="skeleton h-4 w-24" />
+            <div className="skeleton h-5 w-16" />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="skeleton h-3 w-32" />
+            <div className="skeleton h-3 w-16" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function SurahBrowser({
@@ -21,13 +42,43 @@ export default function SurahBrowser({
   onSelect,
   translationEdition,
   onTranslationChange,
+  loading,
 }: SurahBrowserProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [translationFilter, setTranslationFilter] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
 
   const selectedTranslation = TRANSLATIONS.find(
     (t) => t.code === translationEdition
   );
+
+  // Group translations by region, filtered by search
+  const groupedTranslations = useMemo(() => {
+    const q = translationFilter.toLowerCase();
+    const filtered = TRANSLATIONS.filter(
+      (t) =>
+        !q ||
+        t.label.toLowerCase().includes(q) ||
+        t.code.toLowerCase().includes(q)
+    );
+
+    // Build ordered groups preserving the order translations appear in
+    const groupOrder: string[] = [];
+    const groups: Record<string, typeof TRANSLATIONS> = {};
+
+    for (const t of filtered) {
+      const prefix = t.code === "none" ? "none" : t.code.split(".")[0];
+      const groupName = TRANSLATION_GROUP_MAP[prefix] ?? "Other";
+      if (!groups[groupName]) {
+        groups[groupName] = [];
+        groupOrder.push(groupName);
+      }
+      groups[groupName].push(t);
+    }
+
+    return groupOrder.map((name) => ({ name, items: groups[name] }));
+  }, [translationFilter]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -37,11 +88,20 @@ export default function SurahBrowser({
         !dropdownRef.current.contains(e.target as Node)
       ) {
         setDropdownOpen(false);
+        setTranslationFilter("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Focus filter input when dropdown opens
+  useEffect(() => {
+    if (dropdownOpen) {
+      // Delay to let the DOM render
+      requestAnimationFrame(() => filterInputRef.current?.focus());
+    }
+  }, [dropdownOpen]);
 
   const filteredSurahs = surahs.filter((surah) => {
     const q = searchQuery.toLowerCase();
@@ -63,10 +123,14 @@ export default function SurahBrowser({
         <div className="relative">
           <button
             type="button"
-            onClick={() => setDropdownOpen(!dropdownOpen)}
+            onClick={() => {
+              setDropdownOpen(!dropdownOpen);
+              if (dropdownOpen) setTranslationFilter("");
+            }}
             className="w-full flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] transition-colors hover:border-[var(--border-light)] focus:outline-none focus:border-[var(--gold-dim)]"
           >
-            <span className="truncate">
+            <span className="flex items-center gap-2 truncate">
+              <Globe className="h-3.5 w-3.5 shrink-0 text-[var(--text-dim)]" />
               {selectedTranslation?.label ?? "Select translation"}
             </span>
             <ChevronDown
@@ -77,24 +141,61 @@ export default function SurahBrowser({
           </button>
 
           {dropdownOpen && (
-            <div className="absolute z-50 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-xl shadow-black/30 max-h-60 overflow-y-auto">
-              {TRANSLATIONS.map((t) => (
-                <button
-                  key={t.code}
-                  type="button"
-                  onClick={() => {
-                    onTranslationChange(t.code);
-                    setDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2.5 text-sm transition-colors hover:bg-[var(--surface-alt)] ${
-                    t.code === translationEdition
-                      ? "text-[var(--gold)] bg-[var(--surface-alt)]"
-                      : "text-[var(--text)]"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="absolute z-50 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-xl shadow-black/30 overflow-hidden">
+              {/* Search filter */}
+              <div className="sticky top-0 border-b border-[var(--border)] bg-[var(--surface)] p-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-dim)]" />
+                  <input
+                    ref={filterInputRef}
+                    type="text"
+                    placeholder="Filter translations..."
+                    value={translationFilter}
+                    onChange={(e) => setTranslationFilter(e.target.value)}
+                    className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] py-1.5 pl-8 pr-3 text-xs text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-[var(--gold-dim)]"
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setDropdownOpen(false);
+                        setTranslationFilter("");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Grouped translation list */}
+              <div className="max-h-64 overflow-y-auto">
+                {groupedTranslations.length === 0 && (
+                  <div className="px-3 py-4 text-center text-xs text-[var(--text-dim)]">
+                    No translations match &ldquo;{translationFilter}&rdquo;
+                  </div>
+                )}
+                {groupedTranslations.map((group) => (
+                  <div key={group.name}>
+                    <div className="font-mono-ui sticky top-0 bg-[var(--surface-alt)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-dim)]">
+                      {group.name}
+                    </div>
+                    {group.items.map((t) => (
+                      <button
+                        key={t.code}
+                        type="button"
+                        onClick={() => {
+                          onTranslationChange(t.code);
+                          setDropdownOpen(false);
+                          setTranslationFilter("");
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[var(--surface-alt)] ${
+                          t.code === translationEdition
+                            ? "text-[var(--gold)] bg-[var(--surface-alt)]/60"
+                            : "text-[var(--text)]"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -123,6 +224,14 @@ export default function SurahBrowser({
 
       {/* Surah List */}
       <div className="flex-1 space-y-2 overflow-y-auto px-4 pb-4">
+        {loading && surahs.length === 0 && (
+          <>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <SurahSkeleton key={`skeleton-${i}`} />
+            ))}
+          </>
+        )}
+
         {filteredSurahs.map((surah) => (
           <button
             key={surah.number}

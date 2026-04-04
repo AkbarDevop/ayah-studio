@@ -16,6 +16,24 @@ interface AyahSelectorProps {
   onGenerate: () => void;
   defaultDuration: number;
   onDurationChange: (duration: number) => void;
+  loading?: boolean;
+}
+
+function AyahSkeleton() {
+  return (
+    <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-3.5">
+      <div className="flex items-start gap-3">
+        <div className="skeleton mt-0.5 h-5 w-5 shrink-0 rounded" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="skeleton h-3 w-14" />
+          </div>
+          <div className="skeleton h-6 w-full rounded" />
+          <div className="skeleton h-3 w-3/4" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AyahSelector({
@@ -30,6 +48,7 @@ export default function AyahSelector({
   onGenerate,
   defaultDuration,
   onDurationChange,
+  loading,
 }: AyahSelectorProps) {
   const selectedCount = selectedIndices.size;
 
@@ -129,6 +148,14 @@ export default function AyahSelector({
 
       {/* Ayah List */}
       <div className="flex-1 space-y-2 overflow-y-auto px-4 pb-4">
+        {loading && ayahs.length === 0 && (
+          <>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <AyahSkeleton key={`skeleton-${i}`} />
+            ))}
+          </>
+        )}
+
         {ayahs.map((ayah, index) => {
           const translationAyah = translations.find(
             (t) => t.numberInSurah === ayah.numberInSurah

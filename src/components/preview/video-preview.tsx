@@ -15,6 +15,7 @@ import {
   getTranslationFontCss,
   resolveSubtitleColors,
 } from "@/lib/subtitle-formatting";
+import { SUBTITLE_STYLES } from "@/lib/constants";
 
 interface VideoPreviewProps {
   subtitles: Subtitle[];
@@ -28,6 +29,7 @@ interface VideoPreviewProps {
   videoName: string | null;
   videoError: string | null;
   playing: boolean;
+  translationEdition: string;
   onPlayPause: () => void;
   onTimeChange: (seconds: number) => void;
   onDurationChange: (seconds: number) => void;
@@ -35,6 +37,12 @@ interface VideoPreviewProps {
   onVideoError: (message: string | null) => void;
   onSubtitlePlacementChange: (placement: SubtitlePlacement) => void;
   previewSubtitle: Subtitle | null;
+  tajweedEnabled: boolean;
+  tajweedTexts: Map<number, string>;
+}
+
+function isRtlNastaliqEdition(edition: string): boolean {
+  return edition.startsWith("ur.") || edition.startsWith("fa.");
 }
 
 function IslamicPattern() {
@@ -114,6 +122,7 @@ export default function VideoPreview({
   videoName,
   videoError,
   playing,
+  translationEdition,
   onPlayPause,
   onTimeChange,
   onDurationChange,
@@ -121,6 +130,8 @@ export default function VideoPreview({
   onVideoError,
   onSubtitlePlacementChange,
   previewSubtitle,
+  tajweedEnabled,
+  tajweedTexts,
 }: VideoPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -144,20 +155,19 @@ export default function VideoPreview({
     [subtitleFormatting, subtitleStyleId]
   );
   const overlayBackground = useMemo(() => {
-    switch (subtitleStyleId) {
-      case "modern":
-        return applyOpacityToColor("rgba(0,0,0,0.6)", subtitleFormatting.backgroundOpacity);
-      case "emerald":
-        return applyOpacityToColor("rgba(10,20,18,0.8)", subtitleFormatting.backgroundOpacity);
-      case "minimal":
-        return applyOpacityToColor("transparent", subtitleFormatting.backgroundOpacity);
-      case "cinematic":
-        return applyOpacityToColor("rgba(0,0,0,0.85)", subtitleFormatting.backgroundOpacity);
-      case "classic":
-      default:
-        return applyOpacityToColor("rgba(0,0,0,0.7)", subtitleFormatting.backgroundOpacity);
+    if (subtitleFormatting.backgroundColorOverride) {
+      return applyOpacityToColor(subtitleFormatting.backgroundColorOverride, subtitleFormatting.backgroundOpacity);
     }
-  }, [subtitleFormatting.backgroundOpacity, subtitleStyleId]);
+    const style = SUBTITLE_STYLES.find((s) => s.id === subtitleStyleId);
+    const baseBg = style?.bg ?? "rgba(0,0,0,0.7)";
+    return applyOpacityToColor(baseBg, subtitleFormatting.backgroundOpacity);
+  }, [subtitleFormatting.backgroundOpacity, subtitleFormatting.backgroundColorOverride, subtitleStyleId]);
+  const hasNoBackground = useMemo(() => {
+    return (
+      subtitleFormatting.backgroundOpacity === 0 ||
+      overlayBackground === "transparent"
+    );
+  }, [subtitleFormatting.backgroundOpacity, overlayBackground]);
   const aspectRatioLabel = useMemo(
     () => getAspectRatioLabel(aspectRatio),
     [aspectRatio]
@@ -384,6 +394,28 @@ export default function VideoPreview({
         <div className="preview-safe-line" data-line="upper" />
         <div className="preview-safe-line" data-line="lower" />
 
+        {/* Reels/TikTok safe zone indicators for 9:16 */}
+        {aspectRatio === "portrait" && (
+          <>
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 z-[6] border-b border-dashed border-white/10"
+              style={{ height: "15%" }}
+            >
+              <span className="font-mono-ui absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[8px] uppercase tracking-widest text-white/15">
+                Platform UI
+              </span>
+            </div>
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-[6] border-t border-dashed border-white/10"
+              style={{ height: "20%" }}
+            >
+              <span className="font-mono-ui absolute top-1.5 left-1/2 -translate-x-1/2 text-[8px] uppercase tracking-widest text-white/15">
+                Platform UI
+              </span>
+            </div>
+          </>
+        )}
+
         {/* Empty state */}
         {!videoSrc && subtitles.length === 0 && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
@@ -447,43 +479,91 @@ export default function VideoPreview({
             onPointerDown={handleSubtitlePointerDown}
             data-subtitle-theme={subtitleStyleId}
             data-preview-ratio={aspectRatio}
-            className="preview-stage-caption subtitle-theme-surface absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-2xl border border-white/10 px-5 py-3 text-center shadow-2xl shadow-black/40 backdrop-blur-md active:cursor-grabbing"
+            className={[
+              "preview-stage-caption subtitle-theme-surface absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none text-center active:cursor-grabbing",
+              hasNoBackground
+                ? "px-5 py-3"
+                : "border border-white/10 px-5 py-3 shadow-2xl shadow-black/40",
+            ].join(" ")}
             style={{
               left: `${subtitlePlacement.x * 100}%`,
               top: `${subtitlePlacement.y * 100}%`,
               background: overlayBackground,
+              borderRadius: `${subtitleFormatting.borderRadius}px`,
+              backdropFilter: hasNoBackground ? undefined : `blur(${subtitleFormatting.backgroundBlur}px)`,
+              WebkitBackdropFilter: hasNoBackground ? undefined : `blur(${subtitleFormatting.backgroundBlur}px)`,
             }}
             >
             <div className="font-mono-ui mb-2 inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               <Move className="h-3 w-3" />
               Drag
             </div>
-            <p
-              dir="rtl"
-              className="subtitle-theme-arabic mb-1.5 leading-relaxed"
-              style={{
-                color: subtitleColors.arabicColor,
-                fontFamily: getArabicFontCss(subtitleFormatting.arabicFontFamily),
-                fontSize: `${subtitleFormatting.arabicFontSize}px`,
-              }}
-            >
-              {visibleSubtitle.arabic}
-            </p>
-            <p
-              className="subtitle-theme-translation leading-relaxed"
-              style={{
-                color: subtitleColors.translationColor,
-                fontFamily: getTranslationFontCss(
-                  subtitleFormatting.translationFontFamily
-                ),
-                fontSize: `${subtitleFormatting.translationFontSize}px`,
-                fontStyle: subtitleFormatting.translationItalic
-                  ? "italic"
-                  : "normal",
-              }}
-            >
-              {visibleSubtitle.translation}
-            </p>
+            {tajweedEnabled && tajweedTexts.has(visibleSubtitle.ayahNum) ? (
+              <p
+                dir="rtl"
+                className="subtitle-theme-arabic tajweed-text leading-relaxed"
+                style={{
+                  color: subtitleColors.arabicColor,
+                  fontFamily: getArabicFontCss(subtitleFormatting.arabicFontFamily),
+                  fontSize: `${subtitleFormatting.arabicFontSize}px`,
+                  marginBottom: `${subtitleFormatting.lineSpacing}px`,
+                  textShadow: subtitleFormatting.textShadow
+                    ? "0 2px 8px rgba(0,0,0,0.8), 0 1px 3px rgba(0,0,0,0.6)"
+                    : undefined,
+                  WebkitTextStroke: subtitleFormatting.textOutline
+                    ? "1px rgba(0,0,0,0.5)"
+                    : undefined,
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: tajweedTexts.get(visibleSubtitle.ayahNum)!,
+                }}
+              />
+            ) : (
+              <p
+                dir="rtl"
+                className="subtitle-theme-arabic leading-relaxed"
+                style={{
+                  color: subtitleColors.arabicColor,
+                  fontFamily: getArabicFontCss(subtitleFormatting.arabicFontFamily),
+                  fontSize: `${subtitleFormatting.arabicFontSize}px`,
+                  marginBottom: `${subtitleFormatting.lineSpacing}px`,
+                  textShadow: subtitleFormatting.textShadow
+                    ? "0 2px 8px rgba(0,0,0,0.8), 0 1px 3px rgba(0,0,0,0.6)"
+                    : undefined,
+                  WebkitTextStroke: subtitleFormatting.textOutline
+                    ? "1px rgba(0,0,0,0.5)"
+                    : undefined,
+                }}
+              >
+                {visibleSubtitle.arabic}
+              </p>
+            )}
+            {visibleSubtitle.translation && (
+              <p
+                className="subtitle-theme-translation leading-relaxed"
+                style={{
+                  color: subtitleColors.translationColor,
+                  fontFamily: isRtlNastaliqEdition(translationEdition)
+                    ? "var(--font-nastaliq), serif"
+                    : getTranslationFontCss(
+                        subtitleFormatting.translationFontFamily
+                      ),
+                  fontSize: `${subtitleFormatting.translationFontSize}px`,
+                  fontStyle: subtitleFormatting.translationItalic
+                    ? "italic"
+                    : "normal",
+                  direction: isRtlNastaliqEdition(translationEdition) ? "rtl" : undefined,
+                  textShadow: subtitleFormatting.textShadow
+                    ? "0 1px 6px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.5)"
+                    : undefined,
+                  WebkitTextStroke: subtitleFormatting.textOutline
+                    ? "0.5px rgba(0,0,0,0.4)"
+                    : undefined,
+                }}
+              >
+                {visibleSubtitle.translation}
+              </p>
+            )}
           </div>
         )}
       </div>

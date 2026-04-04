@@ -281,15 +281,65 @@ body {
   --subtitle-translation: #c0b8a8;
 }
 
+[data-subtitle-theme="clean"] {
+  --subtitle-bg: transparent;
+  --subtitle-arabic: #ffffff;
+  --subtitle-translation: #cccccc;
+}
+
+[data-subtitle-theme="shadow"] {
+  --subtitle-bg: transparent;
+  --subtitle-arabic: #ffffff;
+  --subtitle-translation: #e0e0e0;
+}
+
 [data-subtitle-theme="classic"] .subtitle-theme-arabic,
 [data-subtitle-theme="emerald"] .subtitle-theme-arabic,
-[data-subtitle-theme="cinematic"] .subtitle-theme-arabic {
+[data-subtitle-theme="cinematic"] .subtitle-theme-arabic,
+[data-subtitle-theme="clean"] .subtitle-theme-arabic {
   font-family: var(--font-amiri), serif;
 }
 
 [data-subtitle-theme="modern"] .subtitle-theme-arabic,
-[data-subtitle-theme="minimal"] .subtitle-theme-arabic {
+[data-subtitle-theme="minimal"] .subtitle-theme-arabic,
+[data-subtitle-theme="shadow"] .subtitle-theme-arabic {
   font-family: var(--font-arabic), serif;
+}
+
+[data-subtitle-theme="clean"] .subtitle-theme-arabic,
+[data-subtitle-theme="shadow"] .subtitle-theme-arabic {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8), 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+[data-subtitle-theme="clean"] .subtitle-theme-translation,
+[data-subtitle-theme="shadow"] .subtitle-theme-translation {
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Tajweed color coding */
+.tajweed-text tajweed.ham_wasl { color: #AAAAAA; }
+.tajweed-text tajweed.slnt { color: #AAAAAA; }
+.tajweed-text tajweed.laam_shamsiyah { color: #AAAAAA; }
+.tajweed-text tajweed.madda_normal { color: #537FFF; }
+.tajweed-text tajweed.madda_permissible { color: #4050FF; }
+.tajweed-text tajweed.madda_obligatory { color: #000EBC; }
+.tajweed-text tajweed.qalqalah { color: #DD0008; }
+.tajweed-text tajweed.madda_munfasil { color: #A00070; }
+.tajweed-text tajweed.madda_muttasil { color: #FF7E1E; }
+.tajweed-text tajweed.ghunnah { color: #FF7E1E; }
+.tajweed-text tajweed.ikhpiaa { color: #D500B7; }
+.tajweed-text tajweed.ithhar { color: #169200; }
+.tajweed-text tajweed.idghaam_wo_ghunnah { color: #169200; }
+.tajweed-text tajweed.idghaam_ghunnah { color: #FF7E1E; }
+.tajweed-text tajweed.iqlaab { color: #26BFFD; }
+.tajweed-text tajweed.ikhpiaa_shafawiyah { color: #D500B7; }
+.tajweed-text tajweed.idghaam_shafawiyah { color: #FF7E1E; }
+.tajweed-text tajweed { display: inline; }
+
+.welcome-dropzone {
+  background:
+    linear-gradient(180deg, rgba(20, 25, 34, 0.6), rgba(14, 18, 25, 0.5)),
+    var(--surface);
 }
 
 /* Custom scrollbar for the dark theme */
@@ -305,4 +355,92 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
+}
+
+/* Skeleton shimmer animation */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-alt) 25%,
+    var(--border) 50%,
+    var(--surface-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* Toast animations */
+@keyframes toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-slide-down {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+}
+
+.toast-enter {
+  animation: toast-slide-up 200ms ease-out forwards;
+}
+
+.toast-exit {
+  animation: toast-slide-down 250ms ease-in forwards;
+}
+
+/* Detection progress step pulse */
+@keyframes step-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.step-pulse {
+  animation: step-pulse 1.6s ease-in-out infinite;
+}
+
+/* Mobile: reduce panel border-radius for tighter layouts */
+@media (max-width: 767px) {
+  .studio-panel,
+  .studio-panel-soft {
+    border-radius: 0.875rem;
+  }
+
+  .preview-stage-frame {
+    border-radius: 0.75rem;
+  }
+
+  .preview-safe-frame,
+  .preview-safe-line {
+    display: none;
+  }
+
+  .mobile-bottom-safe {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
 }

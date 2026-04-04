@@ -12,11 +12,17 @@ export const DEFAULT_SUBTITLE_FORMATTING: SubtitleFormatting = {
   translationFontSize: 16,
   arabicColorOverride: null,
   translationColorOverride: null,
-  backgroundOpacity: 100,
+  backgroundColorOverride: null,
+  backgroundOpacity: 0,
+  backgroundBlur: 12,
+  borderRadius: 16,
   translationItalic: true,
   splitLongAyahs: true,
   maxWordsPerChunk: 12,
   karaokeEnabled: false,
+  textShadow: true,
+  textOutline: false,
+  lineSpacing: 6,
 };
 
 export const ARABIC_FONT_OPTIONS: Array<{
@@ -99,6 +105,41 @@ export function applyOpacityToColor(color: string, opacityPercent: number) {
   }
 
   return color;
+}
+
+/**
+ * Derives the default backgroundOpacity (0–100) from a style's bg color string.
+ * e.g. "rgba(0,0,0,0.7)" → 70, "transparent" → 0
+ */
+export function getStyleDefaultOpacity(bg: string): number {
+  if (!bg || bg === "transparent") return 0;
+  const rgbaMatch = bg.match(
+    /^rgba?\(\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*[0-9.]+(?:\s*,\s*([0-9.]+))?\s*\)$/
+  );
+  if (rgbaMatch) {
+    const alpha = rgbaMatch[1] ? Number.parseFloat(rgbaMatch[1]) : 1;
+    return Math.round(alpha * 100);
+  }
+  return 100;
+}
+
+/**
+ * Returns formatting overrides to apply when switching to a given style,
+ * so that the style's intended look is correctly reflected.
+ */
+export function getStyleFormattingDefaults(styleId: string): Partial<SubtitleFormatting> {
+  const style = SUBTITLE_STYLES.find((s) => s.id === styleId);
+  if (!style) return {};
+
+  const opacity = getStyleDefaultOpacity(style.bg);
+  const isTransparent = opacity === 0;
+
+  return {
+    backgroundOpacity: opacity,
+    backgroundColorOverride: null,
+    textShadow: isTransparent || styleId === "shadow",
+    textOutline: false,
+  };
 }
 
 function clamp(value: number, min: number, max: number) {

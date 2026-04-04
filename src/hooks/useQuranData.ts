@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Ayah, Surah, TranslationAyah } from "@/types";
-import { fetchAllSurahs, fetchSurahWithTranslation } from "@/lib/quran-api";
+import { fetchAllSurahs, fetchSurahWithTranslation, fetchSurahTajweed } from "@/lib/quran-api";
 
 export function useQuranData() {
   const [surahs, setSurahs] = useState<Surah[]>([]);
+  const [surahsLoading, setSurahsLoading] = useState(true);
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
   const [translations, setTranslations] = useState<TranslationAyah[]>([]);
@@ -16,11 +17,17 @@ export function useQuranData() {
   const [selectedAyahIndices, setSelectedAyahIndices] = useState<Set<number>>(
     new Set()
   );
+  const [tajweedEnabled, setTajweedEnabled] = useState(false);
+  const [tajweedTexts, setTajweedTexts] = useState<Map<number, string>>(
+    new Map()
+  );
 
   useEffect(() => {
+    setSurahsLoading(true);
     fetchAllSurahs()
       .then(setSurahs)
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(err.message))
+      .finally(() => setSurahsLoading(false));
   }, []);
 
   const fetchSurahContent = useCallback(
@@ -48,6 +55,28 @@ export function useQuranData() {
     },
     [fetchSurahContent]
   );
+
+  // Fetch tajweed text whenever a surah is selected
+  useEffect(() => {
+    if (!selectedSurah) {
+      setTajweedTexts(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    fetchSurahTajweed(selectedSurah.number)
+      .then((texts) => {
+        if (!cancelled) setTajweedTexts(texts);
+      })
+      .catch(() => {
+        // Silently fail — tajweed is a nice-to-have enhancement
+        if (!cancelled) setTajweedTexts(new Map());
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSurah]);
 
   useEffect(() => {
     if (!selectedSurah) return;
@@ -107,6 +136,7 @@ export function useQuranData() {
   return {
     surahs,
     setSurahs,
+    surahsLoading,
     selectedSurah,
     setSelectedSurah,
     ayahs,
@@ -127,5 +157,8 @@ export function useQuranData() {
     selectAllAyahs,
     deselectAllAyahs,
     clearSelection,
+    tajweedEnabled,
+    setTajweedEnabled,
+    tajweedTexts,
   };
 }

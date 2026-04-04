@@ -25,6 +25,46 @@ interface TranslationSurahData {
 }
 
 const basmalaTranslationCache = new Map<string, Promise<string>>();
+const tajweedCache = new Map<number, Promise<Map<number, string>>>();
+
+interface TajweedVerse {
+  id: number;
+  verse_key: string;
+  text_uthmani_tajweed: string;
+}
+
+interface TajweedApiResponse {
+  verses: TajweedVerse[];
+}
+
+export async function fetchSurahTajweed(
+  surahNum: number
+): Promise<Map<number, string>> {
+  const cached = tajweedCache.get(surahNum);
+  if (cached) return cached;
+
+  const promise = fetch(
+    `https://api.quran.com/api/v4/quran/verses/uthmani_tajweed?chapter_number=${surahNum}`
+  )
+    .then(async (res) => {
+      if (!res.ok) throw new Error("Failed to fetch tajweed text");
+      const data: TajweedApiResponse = await res.json();
+      const map = new Map<number, string>();
+      for (const verse of data.verses) {
+        // verse_key is "surah:ayah", e.g. "1:2"
+        const ayahNum = Number.parseInt(verse.verse_key.split(":")[1], 10);
+        map.set(ayahNum, verse.text_uthmani_tajweed);
+      }
+      return map;
+    })
+    .catch((error) => {
+      tajweedCache.delete(surahNum);
+      throw error;
+    });
+
+  tajweedCache.set(surahNum, promise);
+  return promise;
+}
 
 export async function fetchAllSurahs(): Promise<Surah[]> {
   const res = await fetch(`${QURAN_API}/surah`);
@@ -54,6 +94,11 @@ export async function fetchSurahWithTranslation(
   surahNum: number,
   edition: string
 ): Promise<{ ayahs: Ayah[]; translations: TranslationAyah[] }> {
+  if (edition === "none") {
+    const ayahs = await fetchSurahAyahs(surahNum);
+    return { ayahs, translations: [] };
+  }
+
   const [ayahs, translations] = await Promise.all([
     fetchSurahAyahs(surahNum),
     fetchSurahTranslation(surahNum, edition),
@@ -62,6 +107,10 @@ export async function fetchSurahWithTranslation(
 }
 
 export async function fetchBasmalaTranslation(edition: string): Promise<string> {
+  if (edition === "none") {
+    return "";
+  }
+
   const cached = basmalaTranslationCache.get(edition);
   if (cached) {
     return cached;

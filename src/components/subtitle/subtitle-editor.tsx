@@ -6,6 +6,7 @@ import type { Subtitle } from "@/types";
 interface SubtitleEditorProps {
   subtitle: Subtitle;
   currentTime: number;
+  translationEdition: string;
   onChange: (updated: Subtitle) => void;
   onDelete: () => void;
   onSetStartToPlayhead: () => void;
@@ -23,11 +24,14 @@ function Label({ children }: { children: React.ReactNode }) {
 export default function SubtitleEditor({
   subtitle,
   currentTime,
+  translationEdition,
   onChange,
   onDelete,
   onSetStartToPlayhead,
   onSetEndToPlayhead,
 }: SubtitleEditorProps) {
+  const isArabicOnly = translationEdition === "none";
+  const isNastaliq = translationEdition.startsWith("ur.") || translationEdition.startsWith("fa.");
   function handleFieldChange(
     field: keyof Subtitle,
     value: string | number
@@ -36,7 +40,7 @@ export default function SubtitleEditor({
   }
 
   return (
-    <div className="flex flex-col gap-5 rounded-[1.35rem] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(20,24,32,0.98),rgba(16,20,28,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
+    <div className="flex flex-col gap-4 rounded-[1.1rem] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(20,24,32,0.98),rgba(16,20,28,0.94))] p-3.5 shadow-[0_24px_70px_rgba(0,0,0,0.22)] md:gap-5 md:rounded-[1.35rem] md:p-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -53,7 +57,7 @@ export default function SubtitleEditor({
         <button
           type="button"
           onClick={onDelete}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--surface-alt)]"
+          className="flex min-h-[44px] items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--accent)] transition-colors hover:bg-[var(--surface-alt)]"
           aria-label="Delete subtitle"
         >
           <Trash2 size={13} />
@@ -62,7 +66,7 @@ export default function SubtitleEditor({
       </div>
 
       {/* Timing inputs */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2 md:gap-3">
         <div>
           <Label>Start (s)</Label>
           <input
@@ -73,14 +77,14 @@ export default function SubtitleEditor({
             onChange={(e) =>
               handleFieldChange("start", parseFloat(e.target.value) || 0)
             }
-            className="font-mono-ui w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+            className="font-mono-ui w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
           />
           <button
             type="button"
             onClick={onSetStartToPlayhead}
-            className="font-mono-ui mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+            className="font-mono-ui mt-2 min-h-[36px] rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)] md:px-2.5"
           >
-            Set to Playhead ({currentTime.toFixed(2)}s)
+            Playhead ({currentTime.toFixed(1)}s)
           </button>
         </div>
         <div>
@@ -93,14 +97,14 @@ export default function SubtitleEditor({
             onChange={(e) =>
               handleFieldChange("end", parseFloat(e.target.value) || 0)
             }
-            className="font-mono-ui w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+            className="font-mono-ui w-full rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
           />
           <button
             type="button"
             onClick={onSetEndToPlayhead}
-            className="font-mono-ui mt-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)]"
+            className="font-mono-ui mt-2 min-h-[36px] rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-1.5 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:border-[var(--gold-dim)] hover:text-[var(--text)] md:px-2.5"
           >
-            Set to Playhead ({currentTime.toFixed(2)}s)
+            Playhead ({currentTime.toFixed(1)}s)
           </button>
         </div>
       </div>
@@ -115,18 +119,28 @@ export default function SubtitleEditor({
           dir="rtl"
           value={subtitle.arabic}
           onChange={(e) => handleFieldChange("arabic", e.target.value)}
-          className="font-arabic-ui h-[70px] w-full resize-none rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-[18px] leading-[2] text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+          className="font-arabic-ui h-[70px] w-full resize-none rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-base leading-[2] text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)] md:text-[18px]"
         />
       </div>
 
       {/* Translation textarea */}
       <div>
         <Label>Translation</Label>
-        <textarea
-          value={subtitle.translation}
-          onChange={(e) => handleFieldChange("translation", e.target.value)}
-          className="h-[55px] w-full resize-none rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm italic text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
-        />
+        {isArabicOnly ? (
+          <div className="flex h-[55px] items-center rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 opacity-50">
+            <span className="font-mono-ui text-xs text-[var(--text-dim)]">
+              Arabic only — no translation
+            </span>
+          </div>
+        ) : (
+          <textarea
+            dir={isNastaliq ? "rtl" : undefined}
+            value={subtitle.translation}
+            onChange={(e) => handleFieldChange("translation", e.target.value)}
+            className="h-[55px] w-full resize-none rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm italic text-[var(--text)] outline-none transition-colors focus:border-[var(--gold-dim)]"
+            style={isNastaliq ? { fontFamily: "var(--font-nastaliq), serif" } : undefined}
+          />
+        )}
       </div>
     </div>
   );
