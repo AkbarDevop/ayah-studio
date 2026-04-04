@@ -203,8 +203,8 @@ function splitByBreathPauses(
   wordTimings: WordTiming[],
   maxWordsPerChunk: number
 ): string[][] {
-  const BREATH_PAUSE_THRESHOLD = 0.3; // 300ms = breath pause
-  const MIN_CHUNK_WORDS = 3;
+  const BREATH_PAUSE_THRESHOLD = 0.2; // 200ms = breath pause (reciters pause briefly between phrases)
+  const MIN_CHUNK_WORDS = 2;
 
   // Find all pause points (gaps between consecutive words)
   const pausePoints: { index: number; gap: number }[] = [];

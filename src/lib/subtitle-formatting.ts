@@ -18,7 +18,7 @@ export const DEFAULT_SUBTITLE_FORMATTING: SubtitleFormatting = {
   borderRadius: 16,
   translationItalic: true,
   splitLongAyahs: true,
-  maxWordsPerChunk: 12,
+  maxWordsPerChunk: 8,
   karaokeEnabled: false,
   textShadow: true,
   textOutline: false,
