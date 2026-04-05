@@ -32,6 +32,12 @@ import { alignWordsToQuranText } from "@/lib/word-alignment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
+// Allow uploads up to 100MB (videos can be large)
+export const config = {
+  api: { bodyParser: { sizeLimit: "100mb" } },
+};
 
 const HUGGINGFACE_ASR_MODELS = [
   "tarteel-ai/whisper-base-ar-quran",
@@ -2171,7 +2177,6 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
     endChunk = startChunk;
   }
 
-  const boundaries = [effectiveStart];
   const groups = partitions.map((partition) =>
     getTranscriptChunkGroup(
       usableChunks,
@@ -2180,6 +2185,13 @@ function buildAyahTimingSegmentsFromTranscriptChunks(
       groupCache
     )
   );
+
+  // BUG #4 fix: Use the first transcript group's actual start time instead of
+  // effectiveStart to avoid subtitles appearing during leading silence
+  const firstBoundary = groups.length > 0
+    ? Math.max(effectiveStart, groups[0].start - 0.04)
+    : effectiveStart;
+  const boundaries = [firstBoundary];
 
   const gapAwareSegments = buildSegmentsFromTranscriptGroups(
     ayahs.map((ayah) => ayah.numberInSurah),
@@ -2478,7 +2490,10 @@ function buildSegmentsFromTranscriptGroups(
   const segments: AyahTimingSegment[] = [];
   const edgePadding = 0.04;
   const minDuration = 0.12;
-  let previousEnd = startOffset;
+  // BUG #4 fix: Start from the first group's actual speech time, not the
+  // startOffset (which may be 0), to avoid showing subtitles during leading silence
+  const firstGroupStart = Math.max(startOffset, groups[0].start - edgePadding);
+  let previousEnd = firstGroupStart;
 
   for (let index = 0; index < groups.length; index += 1) {
     const isLast = index === groups.length - 1;

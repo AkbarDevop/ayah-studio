@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useAuth } from "@clerk/nextjs";
 import {
   BookOpen,
   Layers,
@@ -46,7 +47,9 @@ import { useMediaState } from "@/hooks/useMediaState";
 import { usePlayback, useSimulationTimer } from "@/hooks/usePlayback";
 import { useSubtitles } from "@/hooks/useSubtitles";
 import { useDetectionState } from "@/hooks/useDetectionState";
+import { useProjectSync } from "@/hooks/useProjectSync";
 import ErrorBoundary from "@/components/ui/error-boundary";
+import SaveIndicator from "@/components/ui/save-indicator";
 
 const AudioWaveform = dynamic(
   () => import("@/components/audio/audio-waveform"),
@@ -125,7 +128,9 @@ export default function Home() {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <HomeInner />
+        <Suspense>
+          <HomeInner />
+        </Suspense>
       </ToastProvider>
     </ErrorBoundary>
   );
@@ -154,6 +159,36 @@ function HomeInner() {
 
   const media = useMediaState(resetMediaSession);
   const subtitlesState = useSubtitles(resetPlayback);
+  const { isSignedIn } = useAuth();
+
+  const projectSync = useProjectSync(
+    {
+      surahNumber: quran.selectedSurah?.number,
+      translationEdition: quran.translationEdition,
+      subtitles: subtitlesState.subtitles,
+      subtitleStyle: subtitlesState.subtitleStyle,
+      subtitleFormatting: subtitlesState.subtitleFormatting,
+      subtitlePlacement: subtitlesState.subtitlePlacement,
+      aspectRatio: subtitlesState.aspectRatio,
+      youtubeUrl: media.youtubeUrl,
+      videoDuration: media.videoDuration,
+    },
+    {
+      setSurahByNumber: async (surahNumber: number) => {
+        const targetSurah = quran.surahs.find((s) => s.number === surahNumber);
+        if (targetSurah) {
+          await quran.loadSurah(targetSurah);
+        }
+      },
+      setTranslationEdition: quran.setTranslationEdition,
+      setSubtitles: subtitlesState.setSubtitles,
+      setSubtitleStyle: subtitlesState.setSubtitleStyle,
+      setSubtitleFormatting: subtitlesState.setSubtitleFormatting,
+      setSubtitlePlacement: subtitlesState.setSubtitlePlacement,
+      setAspectRatio: subtitlesState.setAspectRatio,
+      setYoutubeUrl: media.setYoutubeUrl,
+    },
+  );
 
   /* ------------------------------------------------------------------ */
   /* Derived                                                             */
@@ -623,6 +658,11 @@ function HomeInner() {
                 </button>
               </div>
             )}
+
+            <SaveIndicator
+              status={projectSync.saveStatus}
+              isSignedIn={isSignedIn ?? false}
+            />
 
             {subtitlesState.subtitles.length > 0 && (
               <button

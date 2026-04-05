@@ -144,11 +144,15 @@ export default function VideoPreview({
   const canPlay =
     Boolean(videoSrc) || subtitles.length > 0 || playbackMode === "audio";
 
+  const FADE_BUFFER = 0.05; // 50ms fade buffer for smoother transitions
   const currentSubtitle = useMemo(() => {
     return subtitles.find(
-      (sub) => currentTime >= sub.start && currentTime <= sub.end
+      (sub) => currentTime >= sub.start && currentTime < sub.end
     ) ?? null;
   }, [subtitles, currentTime]);
+  const isNearEnd = currentSubtitle
+    ? currentTime >= currentSubtitle.end - FADE_BUFFER
+    : false;
   const visibleSubtitle = currentSubtitle ?? (!playing ? previewSubtitle : null);
   const subtitleColors = useMemo(
     () => resolveSubtitleColors(subtitleStyleId, subtitleFormatting),
@@ -492,6 +496,8 @@ export default function VideoPreview({
               borderRadius: `${subtitleFormatting.borderRadius}px`,
               backdropFilter: hasNoBackground ? undefined : `blur(${subtitleFormatting.backgroundBlur}px)`,
               WebkitBackdropFilter: hasNoBackground ? undefined : `blur(${subtitleFormatting.backgroundBlur}px)`,
+              opacity: isNearEnd ? 0.4 : 1,
+              transition: "opacity 0.05s ease-out",
             }}
             >
             <div className="font-mono-ui mb-2 inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">

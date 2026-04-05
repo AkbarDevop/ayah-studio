@@ -85,8 +85,12 @@ export function useVideoRender({
       `${CORE_BASE_URL}/ffmpeg-core.wasm`,
       "application/wasm"
     );
+    const workerURL = await toBlobURL(
+      `${CORE_BASE_URL}/ffmpeg-core.worker.js`,
+      "text/javascript"
+    );
 
-    await ffmpeg.load({ coreURL, wasmURL });
+    await ffmpeg.load({ coreURL, wasmURL, workerURL });
 
     ffmpegRef.current = ffmpeg;
     return ffmpeg;

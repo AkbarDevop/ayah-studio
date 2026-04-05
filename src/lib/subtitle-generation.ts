@@ -42,10 +42,8 @@ export function buildSubtitlesFromAyahRange(
       options.detectedTimings.map((timing) => [timing.ayahNum, timing])
     );
 
-    return [
-      ...prefixSubtitles,
-      ...expandSubtitlesForFormatting(
-        ayahRange.map((ayah, index) => {
+    const expandedSubtitles = expandSubtitlesForFormatting(
+      ayahRange.map((ayah, index) => {
         const translation = translationsByAyah.get(ayah.numberInSurah);
         const timing = timingByAyah.get(ayah.numberInSurah);
 
@@ -59,8 +57,9 @@ export function buildSubtitlesFromAyahRange(
         };
       }),
       formatting
-      ),
-    ];
+    );
+
+    return enforceNoOverlaps(insertSilenceGaps([...prefixSubtitles, ...expandedSubtitles]));
   }
 
   const clipDuration = options.clipDuration ?? 0;
@@ -72,10 +71,8 @@ export function buildSubtitlesFromAyahRange(
     const totalWeight = weights.reduce((sum, value) => sum + value, 0);
     let consumedWeight = 0;
 
-    return [
-      ...prefixSubtitles,
-      ...expandSubtitlesForFormatting(
-        ayahRange.map((ayah, index) => {
+    const expandedSubtitles = expandSubtitlesForFormatting(
+      ayahRange.map((ayah, index) => {
         const translation = translationsByAyah.get(ayah.numberInSurah);
         const start = (consumedWeight / totalWeight) * clipDuration;
         consumedWeight += weights[index];
@@ -94,17 +91,16 @@ export function buildSubtitlesFromAyahRange(
         };
       }),
       formatting
-      ),
-    ];
+    );
+
+    return enforceNoOverlaps(insertSilenceGaps([...prefixSubtitles, ...expandedSubtitles]));
   }
 
   let offset = 0;
   const gap = 0.5;
 
-  return [
-    ...prefixSubtitles,
-    ...expandSubtitlesForFormatting(
-      ayahRange.map((ayah) => {
+  const expandedSubtitles = expandSubtitlesForFormatting(
+    ayahRange.map((ayah) => {
       const translation = translationsByAyah.get(ayah.numberInSurah);
       const subtitle: Subtitle = {
         ayahNum: ayah.numberInSurah,
@@ -119,8 +115,9 @@ export function buildSubtitlesFromAyahRange(
       return subtitle;
     }),
     formatting
-    ),
-  ];
+  );
+
+  return enforceNoOverlaps(insertSilenceGaps([...prefixSubtitles, ...expandedSubtitles]));
 }
 
 function expandSubtitlesForFormatting(
@@ -290,16 +287,29 @@ function buildTimedChunks(
           ? chunkTimings[chunkTimings.length - 1].end
           : subtitle.end;
 
+    const clippedStart = Math.max(chunkStart, subtitle.start);
+    const clippedEnd = Math.min(chunkEnd, subtitle.end);
+
+    // BUG #2 fix: Clip word timings to chunk boundaries so they don't
+    // reference times outside the chunk's own start/end range
+    const clippedWordTimings = chunkTimings
+      .map((wt) => ({
+        word: wt.word,
+        start: Math.max(wt.start, clippedStart),
+        end: Math.min(wt.end, clippedEnd),
+      }))
+      .filter((wt) => wt.end > wt.start);
+
     return {
       ayahNum: subtitle.ayahNum,
       label: subtitle.label,
       arabic: chunkWords.join(" "),
       translation: translationChunks[index] ?? "",
-      start: Math.max(chunkStart, subtitle.start),
-      end: Math.min(chunkEnd, subtitle.end),
+      start: clippedStart,
+      end: clippedEnd,
       chunkIndex: index + 1,
       chunkCount: arabicChunks.length,
-      wordTimings: chunkTimings,
+      wordTimings: clippedWordTimings,
     };
   });
 }
@@ -395,4 +405,54 @@ function formatAyahLabel(surahLabel: string | undefined, ayahNumber: number) {
 
 function tokenizeWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean);
+}
+
+/**
+ * BUG #1 fix: Insert silence gaps between consecutive subtitles.
+ * When a subtitle has word timings, shrink its end to when the last word
+ * actually ends instead of stretching to the next subtitle's start.
+ * This prevents subtitles from showing during reciter pauses.
+ */
+function insertSilenceGaps(subtitles: Subtitle[]): Subtitle[] {
+  if (subtitles.length < 2) return subtitles;
+
+  const MIN_GAP = 0.05; // 50ms minimum gap between subtitles
+
+  return subtitles.map((sub, i) => {
+    if (i === subtitles.length - 1) return sub;
+
+    const next = subtitles[i + 1];
+
+    // If this subtitle has word timings, end it when the last word ends
+    if (sub.wordTimings && sub.wordTimings.length > 0) {
+      const lastWordEnd = sub.wordTimings[sub.wordTimings.length - 1].end;
+      const gapEnd = Math.min(lastWordEnd + 0.15, next.start - MIN_GAP);
+      if (gapEnd < sub.end) {
+        return { ...sub, end: Math.max(gapEnd, sub.start + 0.1) };
+      }
+    }
+
+    // Otherwise, ensure at least MIN_GAP between subtitles
+    if (sub.end >= next.start) {
+      return { ...sub, end: next.start - MIN_GAP };
+    }
+
+    return sub;
+  });
+}
+
+/**
+ * BUG #5 fix: Ensure no two subtitles overlap by pushing later subtitles
+ * forward if they start before the previous one ends (+ minimum gap).
+ */
+function enforceNoOverlaps(subtitles: Subtitle[]): Subtitle[] {
+  const MIN_GAP = 0.05;
+  return subtitles.map((sub, i) => {
+    if (i === 0) return sub;
+    const prev = subtitles[i - 1];
+    if (sub.start < prev.end + MIN_GAP) {
+      return { ...sub, start: prev.end + MIN_GAP };
+    }
+    return sub;
+  });
 }
