@@ -47,13 +47,24 @@ export function buildSubtitlesFromAyahRange(
         const translation = translationsByAyah.get(ayah.numberInSurah);
         const timing = timingByAyah.get(ayah.numberInSurah);
 
+        const subStart = (timing?.start ?? 0) + timeOffset;
+        const subEnd = (timing?.end ?? options.fallbackDuration * (index + 1)) + timeOffset;
+
+        // Carry over word-level timings from detection (shifted by timeOffset)
+        const wordTimings = timing?.words?.map((wt) => ({
+          word: wt.word,
+          start: wt.start + timeOffset,
+          end: wt.end + timeOffset,
+        }));
+
         return {
           ayahNum: ayah.numberInSurah,
           label: formatAyahLabel(options.surahLabel, ayah.numberInSurah),
           arabic: ayah.text,
           translation: translation?.text ?? "",
-          start: (timing?.start ?? 0) + timeOffset,
-          end: (timing?.end ?? options.fallbackDuration * (index + 1)) + timeOffset,
+          start: subStart,
+          end: subEnd,
+          wordTimings,
         };
       }),
       formatting

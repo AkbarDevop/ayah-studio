@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { Plus, BookOpen, Clock } from "lucide-react";
+import { Plus, BookOpen, Clock, Bot, Trash2 } from "lucide-react";
 
 interface Project {
   id: string;
   name: string;
+  surahNumber: number | null;
   surahName: string | null;
   translationCount: number;
   subtitleCount: number;
@@ -36,6 +37,25 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  async function deleteProject(id: string) {
+    const confirmed = window.confirm(
+      "Delete this project? This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setDeleting(id);
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      // Silently fail — the project stays in the list
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   useEffect(() => {
     async function fetchProjects() {
@@ -90,7 +110,22 @@ export default function DashboardPage() {
 
       {/* ── Main Content ────────────────────────────────────────── */}
       <main className="mx-auto max-w-6xl px-5 pt-28 pb-16">
-        <h1 className="text-2xl font-bold tracking-tight mb-8">My Projects</h1>
+        <div className="mb-8 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">My Projects</h1>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Quran subtitle projects live here. X strategy runs in its own focused studio.
+            </p>
+          </div>
+
+          <Link
+            href="/dashboard/x"
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--gold)]/35 bg-[var(--gold)]/10 px-4 py-3 text-sm font-semibold text-[var(--gold-light)] transition hover:bg-[var(--gold)]/14"
+          >
+            <Bot className="h-4 w-4" />
+            Open X Studio
+          </Link>
+        </div>
 
         {/* Loading skeleton */}
         {loading && (
@@ -166,54 +201,72 @@ export default function DashboardPage() {
         {!loading && !error && projects.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {projects.map((project) => (
-              <button
+              <div
                 key={project.id}
-                onClick={() =>
-                  router.push(`/editor?project=${project.id}`)
-                }
-                className="studio-panel p-6 text-left transition-all hover:border-[var(--border-light)] hover:shadow-[0_0_24px_rgba(0,0,0,0.2)] group cursor-pointer"
+                className="studio-panel p-6 text-left transition-all hover:border-[var(--border-light)] hover:shadow-[0_0_24px_rgba(0,0,0,0.2)] group relative"
               >
-                {/* Surah name */}
-                {project.surahName && (
-                  <p className="text-sm font-medium text-[var(--gold)] mb-1 flex items-center gap-1.5">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    {project.surahName}
-                  </p>
-                )}
+                {/* Delete button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteProject(project.id);
+                  }}
+                  disabled={deleting === project.id}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg text-[var(--text-dim)] opacity-0 group-hover:opacity-100 transition-all hover:text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                  title="Delete project"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
 
-                {/* Project name */}
-                <h3 className="text-base font-semibold text-[var(--text)] group-hover:text-[var(--text)] mb-3 truncate">
-                  {project.name}
-                </h3>
-
-                {/* Stats row */}
-                <div className="flex items-center gap-3 text-xs text-[var(--text-dim)] mb-3">
-                  {project.translationCount > 0 && (
-                    <span>
-                      {project.translationCount}{" "}
-                      {project.translationCount === 1
-                        ? "translation"
-                        : "translations"}
-                    </span>
+                {/* Clickable area */}
+                <button
+                  onClick={() =>
+                    router.push(`/editor?project=${project.id}`)
+                  }
+                  className="w-full text-left cursor-pointer"
+                >
+                  {/* Surah name */}
+                  {project.surahName && (
+                    <p className="text-sm font-medium text-[var(--gold)] mb-1 flex items-center gap-1.5">
+                      <BookOpen className="h-3.5 w-3.5" />
+                      {project.surahName}
+                    </p>
                   )}
-                  {project.translationCount > 0 &&
-                    project.subtitleCount > 0 && (
-                      <span className="text-[var(--border)]">·</span>
+
+                  {/* Project name */}
+                  <h3 className="text-base font-semibold text-[var(--text)] group-hover:text-[var(--text)] mb-3 truncate">
+                    {project.name}
+                  </h3>
+
+                  {/* Stats row */}
+                  <div className="flex items-center gap-3 text-xs text-[var(--text-dim)] mb-3">
+                    {project.subtitleCount > 0 && (
+                      <span>
+                        {project.subtitleCount}{" "}
+                        {project.subtitleCount === 1 ? "subtitle" : "subtitles"}
+                      </span>
                     )}
-                  {project.subtitleCount > 0 && (
-                    <span>
-                      {project.subtitleCount}{" "}
-                      {project.subtitleCount === 1 ? "sub" : "subs"}
-                    </span>
-                  )}
-                </div>
+                    {project.subtitleCount > 0 &&
+                      project.translationCount > 0 && (
+                        <span className="text-[var(--border)]">·</span>
+                      )}
+                    {project.translationCount > 0 && (
+                      <span>
+                        {project.translationCount}{" "}
+                        {project.translationCount === 1
+                          ? "translation"
+                          : "translations"}
+                      </span>
+                    )}
+                  </div>
 
-                {/* Last edited */}
-                <div className="flex items-center gap-1.5 text-xs text-[var(--text-dim)]">
-                  <Clock className="h-3 w-3" />
-                  <span>Edited {timeAgo(project.updatedAt)}</span>
-                </div>
-              </button>
+                  {/* Last edited */}
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-dim)]">
+                    <Clock className="h-3 w-3" />
+                    <span>{timeAgo(project.updatedAt)}</span>
+                  </div>
+                </button>
+              </div>
             ))}
           </div>
         )}

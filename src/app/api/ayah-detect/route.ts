@@ -234,6 +234,8 @@ async function extractMonoWav(inputPath: string, outputPath: string) {
     "1",
     "-ar",
     "16000",
+    "-t",
+    "180",          // limit to first 3 minutes — enough for detection
     "-c:a",
     "pcm_s16le",
     outputPath,

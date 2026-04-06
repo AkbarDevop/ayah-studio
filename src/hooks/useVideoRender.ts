@@ -3,13 +3,13 @@
 import { useCallback, useRef, useState } from "react";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import { generateASS } from "@/lib/export";
 import type {
   AspectRatioPreset,
   Subtitle,
   SubtitleFormatting,
   SubtitlePlacement,
 } from "@/types";
+import { normalizeSubtitleTimings } from "@/lib/subtitle-timing";
 
 interface UseVideoRenderOptions {
   videoSrc: string | null;
@@ -139,38 +139,51 @@ export function useVideoRender({
 
       if (cancelledRef.current) return;
 
-      // Generate and write ASS subtitle file
-      const assContent = generateASS(
-        subtitles,
-        subtitleStyleId,
-        subtitlePlacement,
-        aspectRatio,
+      // Build drawtext filter chain for subtitle burning.
+      // The subtitles= and ass= filters are NOT available in ffmpeg.wasm
+      // (no libass compiled in), so we use drawtext which is universally supported.
+      setProgress(10);
+      const normalized = normalizeSubtitleTimings(subtitles);
+      const drawtextFilters = buildDrawtextFilters(
+        normalized,
         subtitleFormatting
       );
-      const encoder = new TextEncoder();
-      await ffmpeg.writeFile("subs.ass", encoder.encode(assContent));
 
       if (cancelledRef.current) return;
 
-      // Burn subtitles into video
-      setProgress(10);
-      await ffmpeg.exec([
+      // Collect FFmpeg log output for debugging
+      const ffmpegLogs: string[] = [];
+      ffmpeg.on("log", ({ message }) => {
+        ffmpegLogs.push(message);
+      });
+
+      const ffmpegArgs = [
         "-i",
         "input.mp4",
-        "-vf",
-        "ass=subs.ass",
+        ...(drawtextFilters.length > 0 ? ["-vf", drawtextFilters] : []),
         "-c:v",
         "libx264",
         "-preset",
-        "fast",
+        "ultrafast",
         "-crf",
-        "23",
+        "28",
         "-c:a",
         "copy",
         "-movflags",
         "+faststart",
         "output.mp4",
-      ]);
+      ];
+
+      console.log("[AyahStudio] FFmpeg args:", ffmpegArgs);
+      const exitCode = await ffmpeg.exec(ffmpegArgs);
+
+      if (exitCode !== 0) {
+        console.error("[AyahStudio] FFmpeg exited with code:", exitCode);
+        console.error("[AyahStudio] FFmpeg logs:", ffmpegLogs.join("\n"));
+        throw new Error(
+          `FFmpeg exited with code ${exitCode}. Check browser console for details.`
+        );
+      }
 
       if (cancelledRef.current) return;
 
@@ -193,9 +206,9 @@ export function useVideoRender({
 
       // Clean up temp files
       await ffmpeg.deleteFile("input.mp4").catch(() => {});
-      await ffmpeg.deleteFile("subs.ass").catch(() => {});
       await ffmpeg.deleteFile("output.mp4").catch(() => {});
     } catch (err) {
+      console.error("[AyahStudio] Render error:", err);
       if (!cancelledRef.current) {
         const message =
           err instanceof Error ? err.message : "Video rendering failed.";
@@ -241,4 +254,79 @@ export function useVideoRender({
     error,
     isSupported,
   };
+}
+
+// ---------------------------------------------------------------------------
+// drawtext filter builder
+// ---------------------------------------------------------------------------
+// FFmpeg.wasm does not include libass, so neither `subtitles=` nor `ass=`
+// filters work.  The drawtext filter is compiled in by default and gives us
+// per-subtitle timed text overlays.
+//
+// Each subtitle gets TWO drawtext entries: one for Arabic, one for translation.
+// They are chained with commas into a single -vf string.
+// ---------------------------------------------------------------------------
+
+/** Escape a string for use inside a drawtext `text=` value. */
+function escapeDrawtext(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\\\\\") // backslash
+    .replace(/'/g, "\u2019") // smart-quote avoids shell quoting issues
+    .replace(/:/g, "\\:")
+    .replace(/%/g, "%%")
+    .replace(/\n/g, " "); // drawtext doesn't do multi-line; collapse
+}
+
+function buildDrawtextFilters(
+  subtitles: Subtitle[],
+  formatting: SubtitleFormatting
+): string {
+  if (subtitles.length === 0) return "";
+
+  const arabicSize = Math.round(formatting.arabicFontSize * 1.6);
+  const translationSize = Math.round(formatting.translationFontSize * 1.4);
+
+  const filters: string[] = [];
+
+  for (const sub of subtitles) {
+    const arabicText = escapeDrawtext(sub.arabic);
+    const translationText = escapeDrawtext(sub.translation);
+    const start = sub.start.toFixed(3);
+    const end = sub.end.toFixed(3);
+    const enable = `between(t\\,${start}\\,${end})`;
+
+    // Arabic line — centered, near bottom
+    filters.push(
+      [
+        "drawtext=",
+        `text='${arabicText}'`,
+        `fontsize=${arabicSize}`,
+        "fontcolor=white",
+        "borderw=2",
+        "bordercolor=black",
+        "x=(w-text_w)/2",
+        "y=h-120-text_h",
+        `enable='${enable}'`,
+      ].join(":")
+    );
+
+    // Translation line — centered, below Arabic
+    if (translationText.trim().length > 0) {
+      filters.push(
+        [
+          "drawtext=",
+          `text='${translationText}'`,
+          `fontsize=${translationSize}`,
+          "fontcolor=white@0.85",
+          "borderw=1",
+          "bordercolor=black",
+          "x=(w-text_w)/2",
+          "y=h-80",
+          `enable='${enable}'`,
+        ].join(":")
+      );
+    }
+  }
+
+  return filters.join(",");
 }

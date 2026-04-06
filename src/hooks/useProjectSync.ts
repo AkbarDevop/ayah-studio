@@ -40,6 +40,8 @@ interface EditorState {
 
 export interface ProjectSyncReturn {
   projectId: string | null;
+  projectName: string;
+  setProjectName: (name: string) => void;
   saveStatus: SaveStatus;
   isLoading: boolean;
   saveNow: () => void;
@@ -78,6 +80,7 @@ export function useProjectSync(
   const [projectId, setProjectId] = useState<string | null>(
     searchParams.get("project"),
   );
+  const [projectName, setProjectName] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -101,10 +104,14 @@ export function useProjectSync(
     const startAyah = ayahNums.length > 0 ? Math.min(...ayahNums) : null;
     const endAyah = ayahNums.length > 0 ? Math.max(...ayahNums) : null;
 
+    // Use user-set name if available, otherwise auto-generate
+    const autoName = editorState.surahNumber
+      ? `Surah ${editorState.surahNumber}`
+      : "Untitled Project";
+    const name = projectName || autoName;
+
     return {
-      name: editorState.surahNumber
-        ? `Surah ${editorState.surahNumber}`
-        : "Untitled Project",
+      name,
       surahNumber: editorState.surahNumber ?? null,
       startAyah,
       endAyah,
@@ -117,13 +124,17 @@ export function useProjectSync(
       subtitlePlacement: editorState.subtitlePlacement,
       aspectRatio: editorState.aspectRatio,
     };
-  }, [editorState]);
+  }, [editorState, projectName]);
 
   /* ------------------------------------------------------------------ */
   /* Hydrate editor state from a fetched project                         */
   /* ------------------------------------------------------------------ */
   const hydrateFromProject = useCallback(
     async (project: Record<string, unknown>) => {
+      if (project.name && typeof project.name === "string") {
+        setProjectName(project.name);
+      }
+
       if (project.translationEdition && typeof project.translationEdition === "string") {
         callbacks.setTranslationEdition(project.translationEdition);
       }
@@ -330,6 +341,8 @@ export function useProjectSync(
 
   return {
     projectId,
+    projectName,
+    setProjectName,
     saveStatus,
     isLoading,
     saveNow,

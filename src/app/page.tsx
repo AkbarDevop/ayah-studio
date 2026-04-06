@@ -79,6 +79,13 @@ export default function LandingPage() {
               Start Creating
               <ArrowRight className="h-4 w-4" />
             </Link>
+            <Link
+              href="/dashboard/x"
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--gold)]/35 bg-[var(--gold)]/8 px-7 py-3.5 text-sm font-medium text-[var(--gold-light)] transition-colors hover:bg-[var(--gold)]/14"
+            >
+              Try X Studio
+              <Sparkles className="h-4 w-4" />
+            </Link>
             <a
               href="#how-it-works"
               className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-7 py-3.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--border-light)] hover:text-[var(--text)]"

@@ -504,7 +504,51 @@ export default function VideoPreview({
               <Move className="h-3 w-3" />
               Drag
             </div>
-            {tajweedEnabled && tajweedTexts.has(visibleSubtitle.ayahNum) ? (
+            {subtitleFormatting.karaokeEnabled &&
+            visibleSubtitle.wordTimings &&
+            visibleSubtitle.wordTimings.length > 0 ? (
+              <p
+                dir="rtl"
+                className="subtitle-theme-arabic leading-relaxed"
+                style={{
+                  fontFamily: getArabicFontCss(subtitleFormatting.arabicFontFamily),
+                  fontSize: `${subtitleFormatting.arabicFontSize}px`,
+                  marginBottom: `${subtitleFormatting.lineSpacing}px`,
+                  textShadow: subtitleFormatting.textShadow
+                    ? "0 2px 8px rgba(0,0,0,0.8), 0 1px 3px rgba(0,0,0,0.6)"
+                    : undefined,
+                  WebkitTextStroke: subtitleFormatting.textOutline
+                    ? "1px rgba(0,0,0,0.5)"
+                    : undefined,
+                }}
+              >
+                {visibleSubtitle.wordTimings.map((wt, i) => {
+                  const isSpoken = currentTime >= wt.end;
+                  const isCurrent =
+                    currentTime >= wt.start && currentTime < wt.end;
+                  return (
+                    <span
+                      key={i}
+                      style={{
+                        color: isCurrent
+                          ? "#FFFFFF"
+                          : isSpoken
+                            ? subtitleColors.arabicColor
+                            : undefined,
+                        opacity: isCurrent || isSpoken ? 1 : 0.4,
+                        fontWeight: isCurrent ? 700 : undefined,
+                        transform: isCurrent ? "scale(1.05)" : undefined,
+                        display: "inline-block",
+                        transition:
+                          "color 0.15s ease, opacity 0.15s ease, transform 0.15s ease, font-weight 0.15s ease",
+                      }}
+                    >
+                      {wt.word}{" "}
+                    </span>
+                  );
+                })}
+              </p>
+            ) : tajweedEnabled && tajweedTexts.has(visibleSubtitle.ayahNum) ? (
               <p
                 dir="rtl"
                 className="subtitle-theme-arabic tajweed-text leading-relaxed"

@@ -19,6 +19,8 @@ import {
   Redo2,
   Globe,
   Keyboard,
+  Pencil,
+  Check,
 } from "lucide-react";
 import type {
   Surah,

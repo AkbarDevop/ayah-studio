@@ -16,6 +16,8 @@ export type DetectionPhase =
 
 /** Size threshold below which we skip client-side audio extraction. */
 const EXTRACTION_SKIP_BYTES = 5 * 1024 * 1024; // 5 MB
+/** Size threshold above which client-side WASM extraction is too slow — let server handle it. */
+const EXTRACTION_MAX_BYTES = 50 * 1024 * 1024; // 50 MB
 
 /**
  * Extract just the audio track from a video file using FFmpeg.wasm.
@@ -35,8 +37,18 @@ async function extractAudioForDetection(file: File): Promise<File> {
     "/ffmpeg/ffmpeg-core.wasm",
     "application/wasm"
   );
+  // Try loading worker for multi-threaded build
+  let workerURL: string | undefined;
+  try {
+    workerURL = await toBlobURL(
+      "/ffmpeg/ffmpeg-core.worker.js",
+      "text/javascript"
+    );
+  } catch {
+    // Worker not available, single-threaded is fine for audio extraction
+  }
 
-  await ffmpeg.load({ coreURL, wasmURL });
+  await ffmpeg.load(workerURL ? { coreURL, wasmURL, workerURL } : { coreURL, wasmURL });
 
   await ffmpeg.writeFile("input", await fetchFile(file));
   await ffmpeg.exec([
@@ -149,15 +161,22 @@ export function useDetectionState() {
       let fileToUpload = sourceFile;
       const isVideo = sourceFile.type.startsWith("video/");
       const isLargeEnough = sourceFile.size > EXTRACTION_SKIP_BYTES;
+      const isTooLargeForWasm = sourceFile.size > EXTRACTION_MAX_BYTES;
 
-      if (isVideo && isLargeEnough) {
+      if (isVideo && isLargeEnough && !isTooLargeForWasm) {
         setDetectionPhase("preparing");
         try {
+          console.log(`[detect] Extracting audio from ${sourceFile.name} (${(sourceFile.size / 1024 / 1024).toFixed(1)} MB)...`);
           fileToUpload = await extractAudioForDetection(sourceFile);
-        } catch {
-          // If extraction fails, fall back to uploading the original file
+          console.log(`[detect] Extracted audio: ${(fileToUpload.size / 1024).toFixed(0)} KB`);
+        } catch (extractErr) {
+          console.warn("[detect] Client-side extraction failed, uploading original:", extractErr);
           fileToUpload = sourceFile;
         }
+      } else if (!isVideo) {
+        console.log(`[detect] Audio file, skipping extraction: ${(sourceFile.size / 1024).toFixed(0)} KB`);
+      } else {
+        console.log(`[detect] Small file (${(sourceFile.size / 1024).toFixed(0)} KB), skipping extraction`);
       }
 
       // --- Phase 2: Upload ---
